@@ -2,6 +2,7 @@ import { HttpAgent } from "@ag-ui/client";
 import {
   CopilotRuntime,
   createCopilotRuntimeHandler,
+  InMemoryAgentRunner,
 } from "@copilotkit/runtime/v2";
 
 function agentUrl(path: string) {
@@ -27,7 +28,7 @@ export function buildCopilotRuntimeConfig(
       },
       a2ui: { injectA2UITool: false },
     },
-    mode: "single-route" as const,
+    mode: "multi-route" as const,
   };
 }
 
@@ -43,6 +44,7 @@ export function createCopilotV2Handler(
       default: httpAgent,
       [agentKey]: httpAgent,
     },
+    runner: new InMemoryAgentRunner(),
     a2ui: config.runtime.a2ui,
   });
 

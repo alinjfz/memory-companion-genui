@@ -10,7 +10,7 @@ export function PatientProviders({ children }: { children: React.ReactNode }) {
     <CopilotKit
       runtimeUrl="/api/copilotkit-patient"
       agent="patient_agent"
-      useSingleEndpoint
+      useSingleEndpoint={false}
       showDevConsole={false}
       renderActivityMessages={ACTIVITY_RENDERERS}
     >

@@ -16,6 +16,8 @@ export const MemoryCardSchema = z.object({
   photoHint: z.string(),
   relationship: z.string().optional(),
   imageUrl: z.string().optional(),
+  /** Ask answers: show story on the card instead of tap-to-read photo only. */
+  showStoryInline: z.boolean().optional(),
 });
 
 export const DailyTaskSchema = z.object({

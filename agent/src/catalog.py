@@ -3,7 +3,7 @@ CATALOG_ID = "echoes-patient-v1"
 CATALOG_PROMPT = """
 Echoes A2UI catalog (emit JSON surfaces with these components):
 - PatientGreeting: warm header with name, dayOfWeek, dateString, locationArea
-- MemoryCard: reminiscence card with title, story, photoHint, imageUrl, relationship
+- MemoryCard: reminiscence card with title, story, photoHint, imageUrl, relationship, showStoryInline (ask answers)
 - DailyTask: one task with time, icon, description, complexity
 - MedicationReminder: medications array with name, dose, time
 - PanicOptions: patientName + 4 large calming options (music, talk, family, breathe)

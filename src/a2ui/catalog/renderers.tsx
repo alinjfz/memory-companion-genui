@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, useCallback, type CSSProperties } from "react";
+import { MemoryModal } from "@/components/patient/MemoryModal";
 import type {
   CalmingMessageProps,
   DailyTaskProps,
@@ -32,36 +33,75 @@ export function PatientGreetingRenderer({ props }: { props: PatientGreetingProps
 }
 
 export function MemoryCardRenderer({ props }: { props: MemoryCardProps }) {
-  const canReveal = Boolean(props.imageUrl);
-  const [revealed, setRevealed] = useState(!canReveal);
+  const inlineAnswer = Boolean(props.showStoryInline);
+  const canOpen = Boolean(!inlineAnswer && (props.imageUrl || props.story));
+  const [open, setOpen] = useState(false);
+  const closeModal = useCallback(() => setOpen(false), []);
+
+  if (inlineAnswer) {
+    return (
+      <article className="a2ui-card a2ui-memory a2ui-memory-inline">
+        {props.imageUrl ? (
+          <div className="a2ui-memory-photo a2ui-memory-photo-inline">
+            <img src={props.imageUrl} alt="" decoding="async" />
+          </div>
+        ) : props.photoHint ? (
+          <span className="a2ui-emoji a2ui-memory-hint" aria-hidden="true">
+            {props.photoHint}
+          </span>
+        ) : null}
+        <h2>{props.title}</h2>
+        {props.relationship ? <p className="a2ui-memory-inline-rel">{props.relationship}</p> : null}
+        <p className="a2ui-memory-inline-story">{props.story}</p>
+      </article>
+    );
+  }
 
   return (
-    <article className={`a2ui-card a2ui-memory${revealed ? " revealed" : " photo-only"}`}>
-      {props.imageUrl ? (
-        <button
-          type="button"
-          className="a2ui-memory-photo-btn"
-          onClick={() => setRevealed(true)}
-          aria-expanded={revealed}
-          aria-label={revealed ? props.title : `Show memory: ${props.title}`}
-        >
-          <div className="a2ui-memory-photo">
-            <img src={props.imageUrl} alt="" />
-          </div>
-          {!revealed ? <span className="a2ui-memory-tap">Tap the photo to read</span> : null}
-        </button>
-      ) : (
-        <span className="a2ui-emoji a2ui-memory-hint" aria-hidden="true">
-          {props.photoHint}
-        </span>
-      )}
-      {revealed ? (
-        <>
-          <h2>{props.title}</h2>
-          <p>{props.story}</p>
-        </>
+    <>
+      <article className={`a2ui-card a2ui-memory${canOpen ? " photo-only" : ""}`}>
+        {props.imageUrl ? (
+          <button
+            type="button"
+            className="a2ui-memory-photo-btn"
+            onClick={() => setOpen(true)}
+            aria-haspopup="dialog"
+            aria-label={`Open memory: ${props.title}`}
+          >
+            <div className="a2ui-memory-photo">
+              <img src={props.imageUrl} alt="" decoding="async" />
+            </div>
+            <span className="a2ui-memory-tap">Tap the photo to read</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="a2ui-memory-open-btn"
+            onClick={() => setOpen(true)}
+            aria-haspopup="dialog"
+            aria-label={`Open memory: ${props.title}`}
+          >
+            <span className="a2ui-emoji a2ui-memory-hint" aria-hidden="true">
+              {props.photoHint}
+            </span>
+            <span className="a2ui-memory-tap">Tap to read</span>
+          </button>
+        )}
+        {!props.imageUrl ? <h2>{props.title}</h2> : null}
+      </article>
+
+      {open ? (
+        <MemoryModal
+          open
+          title={props.title}
+          story={props.story}
+          imageUrl={props.imageUrl}
+          photoHint={props.photoHint}
+          relationship={props.relationship}
+          onClose={closeModal}
+        />
       ) : null}
-    </article>
+    </>
   );
 }
 

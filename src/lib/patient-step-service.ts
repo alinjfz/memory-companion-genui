@@ -297,7 +297,7 @@ export async function resolvePatientStep(
       memory ??
       (answer.memoryId ? profile.key_memories.find((item) => item.id === answer.memoryId) : null);
 
-    if (memoryRecord && askStep.component.component === "MemoryCard") {
+    if (askStep.component.component === "MemoryCard") {
       askStep = {
         ...askStep,
         component: {
@@ -306,9 +306,14 @@ export async function resolvePatientStep(
             ...askStep.component.props,
             title: cardTitle,
             story: answer.body,
-            photoHint: memoryRecord.photoHint,
-            relationship: memoryRecord.relationship,
-            imageUrl: createMemoryImage(memoryRecord),
+            showStoryInline: true,
+            ...(memoryRecord
+              ? {
+                  photoHint: memoryRecord.photoHint,
+                  relationship: memoryRecord.relationship,
+                  imageUrl: createMemoryImage(memoryRecord),
+                }
+              : {}),
           },
         },
       };

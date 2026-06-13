@@ -10,6 +10,8 @@ import { PatientProviders } from "@/components/patient/PatientProviders";
 import "@/a2ui/theme.css";
 import "@/components/patient/patient.css";
 import type { DailyTask, Memory, PatientProfile } from "@/lib/echoes";
+import { createMemoryImage } from "@/lib/memory-image";
+import { MemoryModal } from "@/components/patient/MemoryModal";
 import type { PatientStepPayload } from "@/lib/patient-step-service";
 import { clearSession, readSession, writePatientSession } from "@/lib/session";
 
@@ -176,24 +178,6 @@ function buildAnchors(profile: PatientProfile): DashboardAnchor[] {
   ];
 }
 
-function memoryPreview(memory: Memory) {
-  if (memory.photoPath) return memory.photoPath;
-  const seed = memory.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const hue = seed % 360;
-  const title = memory.title.replace(/'/g, "");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" role="img" aria-label="${title}">
-    <defs>
-      <linearGradient id="g" x1="0%" x2="100%" y1="0%" y2="100%">
-        <stop offset="0%" stop-color="hsl(${hue} 70% 88%)"/>
-        <stop offset="100%" stop-color="hsl(${(hue + 40) % 360} 70% 78%)"/>
-      </linearGradient>
-    </defs>
-    <rect width="400" height="400" rx="32" fill="url(#g)" />
-    <text x="32" y="180" font-size="72" font-family="Arial, sans-serif">${memory.photoHint}</text>
-  </svg>`;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
 async function fetchDashboardProfile(accessCode: string) {
   const response = await fetch(`/api/state?accessCode=${encodeURIComponent(accessCode)}`).catch(() => null);
   if (!response?.ok) return null;
@@ -272,6 +256,15 @@ function PatientDashboard() {
     () => profile?.key_memories.find((memory) => memory.id === selectedMemoryId) ?? null,
     [profile, selectedMemoryId],
   );
+  const memoryPreviewUrls = useMemo(() => {
+    const urls = new Map<string, string>();
+    for (const memory of profile?.key_memories ?? []) {
+      urls.set(memory.id, createMemoryImage(memory));
+    }
+    return urls;
+  }, [profile]);
+  const closeMemoryModal = useCallback(() => setSelectedMemoryId(null), []);
+  const openMemoryModal = useCallback((memoryId: string) => setSelectedMemoryId(memoryId), []);
   const helpIsMusic = helpSurface?.components[0]?.component === "MusicCard";
 
   useEffect(() => setAgentReady(Boolean(agent)), [agent]);
@@ -685,30 +678,34 @@ function PatientDashboard() {
             <h2 className="patient-memory-gallery-title">Memories</h2>
             <div className="patient-memory-gallery-grid">
               {profile.key_memories.map((memory) => {
-                const preview = memoryPreview(memory);
+                const preview = memoryPreviewUrls.get(memory.id);
                 const active = selectedMemoryId === memory.id;
                 return (
                   <button
                     key={memory.id}
                     type="button"
                     className={`patient-memory-gallery-item${active ? " active" : ""}`}
-                    onClick={() => setSelectedMemoryId(active ? null : memory.id)}
-                    aria-expanded={active}
-                    aria-label={`Memory: ${memory.title}`}
+                    onClick={() => openMemoryModal(memory.id)}
+                    aria-haspopup="dialog"
+                    aria-label={`Open memory: ${memory.title}`}
                   >
-                    {preview ? <img src={preview} alt="" /> : null}
+                    {preview ? <img src={preview} alt="" decoding="async" /> : null}
                   </button>
                 );
               })}
             </div>
-            {selectedMemory ? (
-              <article className="patient-memory-gallery-story">
-                <h3>{selectedMemory.title}</h3>
-                <p>{selectedMemory.story}</p>
-              </article>
-            ) : null}
           </section>
         ) : null}
+
+        <MemoryModal
+          open={Boolean(selectedMemory)}
+          title={selectedMemory?.title ?? ""}
+          story={selectedMemory?.story ?? ""}
+          imageUrl={selectedMemory ? memoryPreviewUrls.get(selectedMemory.id) : undefined}
+          photoHint={selectedMemory?.photoHint}
+          relationship={selectedMemory?.relationship}
+          onClose={closeMemoryModal}
+        />
 
         <section className="patient-dashboard-strip" aria-label="Today at a glance">
           {anchors.map((anchor) => (

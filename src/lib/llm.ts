@@ -14,10 +14,23 @@ export type EvidenceCard = {
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_OPENROUTER_MODEL = "amazon/nova-lite-v1";
+/** OpenRouter free router — no BYOK; picks an available free model. */
+const DEFAULT_OPENROUTER_MODEL = "openrouter/free";
+const FREE_OPENROUTER_FALLBACKS = [
+  "meta-llama/llama-3.2-3b-instruct:free",
+  "qwen/qwen-2.5-7b-instruct:free",
+  "google/gemma-2-9b-it:free",
+];
 
-function resolveOpenRouterModel() {
-  return process.env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL;
+function resolveOpenRouterModels(): string[] {
+  const configured = process.env.OPENROUTER_MODEL?.trim();
+  const primary = configured || DEFAULT_OPENROUTER_MODEL;
+  if (primary === "openrouter/free") {
+    // Free router first; specific :free chat models if router picks a safety-only model.
+    return [primary, ...FREE_OPENROUTER_FALLBACKS];
+  }
+  const fallbacks = FREE_OPENROUTER_FALLBACKS.filter((model) => model !== primary);
+  return [primary, ...fallbacks];
 }
 
 function openRouterHeaders(apiKey: string) {
@@ -29,23 +42,35 @@ function openRouterHeaders(apiKey: string) {
   };
 }
 
-function openRouterProviderConfig() {
+function openRouterProviderConfig(model: string) {
   const order = process.env.OPENROUTER_PROVIDER_ORDER?.split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+  if (!order?.length) return {};
   return {
     provider: {
       allow_fallbacks: true,
-      ...(order?.length ? { order } : {}),
+      order,
     },
   };
 }
 
-/** Amazon Nova on Bedrock often rejects json_object; try plain prompt first. */
+/** Free router and :free models: plain prompt only (json_object often fails or routes to safety models). */
 function jsonModeAttempts(model: string): boolean[] {
-  if (model.startsWith("amazon/")) return [false, true];
+  if (
+    model === "openrouter/free" ||
+    model.endsWith(":free") ||
+    model.startsWith("amazon/")
+  ) {
+    return [false];
+  }
   return [true, false];
 }
+
+const PATIENT_JSON_HINT =
+  "Respond with ONLY a JSON object (no markdown fences): " +
+  '{"title":"short title","body":"1-2 short sentences","speakText":"same as body","okayLabel":"Okay",' +
+  '"theme":{"mood":"talk","accent":"#4a7fb8","surface":"linear-gradient(155deg,#f0f7ff 0%,#faf8f5 100%)","text":"#1e4a72","icon":"💬"}}';
 
 function logOpenRouterError(status: number, detail: string) {
   console.warn("[echoes] OpenRouter LLM failed:", status, detail.slice(0, 240));
@@ -67,24 +92,34 @@ function logOpenRouterError(status: number, detail: string) {
 
 type OpenRouterMessage = { role: "system" | "user" | "assistant"; content: string };
 
-async function callOpenRouterChat(params: {
+async function callOpenRouterChatForModel(params: {
   apiKey: string;
   model: string;
   messages: OpenRouterMessage[];
   temperature: number;
   maxTokens?: number;
+  jsonHint?: string;
 }): Promise<string | null> {
   for (const useJsonMode of jsonModeAttempts(params.model)) {
+    const messages =
+      useJsonMode || !params.jsonHint
+        ? params.messages
+        : params.messages.map((message, index) =>
+            index === params.messages.length - 1 && message.role === "user"
+              ? { ...message, content: `${message.content}\n\n${params.jsonHint}` }
+              : message,
+          );
+
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: openRouterHeaders(params.apiKey),
       body: JSON.stringify({
         model: params.model,
-        messages: params.messages,
+        messages,
         temperature: params.temperature,
         ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
         ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
-        ...openRouterProviderConfig(),
+        ...openRouterProviderConfig(params.model),
       }),
     });
 
@@ -95,12 +130,46 @@ async function callOpenRouterChat(params: {
     }
 
     const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string | null } }>;
+      model?: string;
+      choices?: Array<{
+        finish_reason?: string;
+        message?: { content?: string | null };
+      }>;
     };
     const content = data.choices?.[0]?.message?.content;
     if (typeof content === "string" && content.trim()) return content;
+
+    console.warn(
+      "[echoes] OpenRouter empty content:",
+      data.model ?? params.model,
+      data.choices?.[0]?.finish_reason ?? "no finish_reason",
+    );
   }
 
+  return null;
+}
+
+async function callOpenRouterChat(params: {
+  apiKey: string;
+  models?: string[];
+  messages: OpenRouterMessage[];
+  temperature: number;
+  maxTokens?: number;
+  jsonHint?: string;
+}): Promise<string | null> {
+  const models = params.models ?? resolveOpenRouterModels();
+  for (const model of models) {
+    const content = await callOpenRouterChatForModel({
+      apiKey: params.apiKey,
+      model,
+      messages: params.messages,
+      temperature: params.temperature,
+      maxTokens: params.maxTokens,
+      jsonHint: params.jsonHint,
+    });
+    if (content) return content;
+    console.warn("[echoes] OpenRouter model failed, trying next:", model);
+  }
   return null;
 }
 
@@ -139,10 +208,8 @@ async function callOpenRouter(query: string): Promise<EvidenceCard | null> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) return null;
 
-  const model = resolveOpenRouterModel();
   const content = await callOpenRouterChat({
     apiKey,
-    model,
     temperature: 0.2,
     messages: [
       {
@@ -240,19 +307,33 @@ function extractJsonObject(raw: string): string | null {
 
 function parsePatientMoment(raw: string, question?: string): PatientMomentDraft | null {
   const jsonText = extractJsonObject(raw);
-  if (!jsonText) return null;
-
-  try {
-    const parsed = JSON.parse(jsonText) as PatientMomentDraft;
-    if (typeof parsed.body === "string" && parsed.body.trim()) {
-      return {
-        ...parsed,
-        title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title : question?.trim(),
-      };
+  if (jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText) as PatientMomentDraft;
+      if (typeof parsed.body === "string" && parsed.body.trim()) {
+        return {
+          ...parsed,
+          title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title : question?.trim(),
+        };
+      }
+    } catch {
+      // fall through to plain-text handling
     }
-  } catch {
-    return null;
   }
+
+  const plain = raw
+    .trim()
+    .replace(/^```(?:json|text)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  if (plain && !plain.startsWith("{")) {
+    return {
+      title: question?.trim(),
+      body: plain,
+      speakText: plain,
+    };
+  }
+
   return null;
 }
 
@@ -262,7 +343,8 @@ export function isPatientLlmConfigured() {
   return Boolean(process.env.OPENROUTER_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim());
 }
 
-const PATIENT_SYSTEM_PROMPT = `You write for a patient companion app called Echoes.
+const PATIENT_SYSTEM_PROMPT = `You write for a patient companion demo app called Echoes.
+Patients have fictional care-plan profiles. Generate a warm answer card — not a safety review.
 Rules:
 - Use only the patient's first name.
 - Max 10 words per sentence.
@@ -276,15 +358,14 @@ theme must include: mood, accent (hex), surface (css gradient), text (hex), icon
 
 async function callOpenRouterPatientLlm(
   openrouterKey: string,
-  model: string,
   prompt: string,
   question?: string,
 ): Promise<PatientMomentDraft | null> {
   const content = await callOpenRouterChat({
     apiKey: openrouterKey,
-    model,
     temperature: 0.55,
-    maxTokens: 512,
+    maxTokens: 1024,
+    jsonHint: PATIENT_JSON_HINT,
     messages: [
       { role: "system", content: PATIENT_SYSTEM_PROMPT },
       { role: "user", content: prompt },
@@ -301,13 +382,12 @@ async function callOpenRouterPatientLlm(
 }
 
 async function callPatientLlm(prompt: string, question?: string): Promise<PatientMomentDraft | null> {
-  const timeoutMs = 25_000;
+  const timeoutMs = 45_000;
 
   const run = async (): Promise<PatientMomentDraft | null> => {
     const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
     if (openrouterKey) {
-      const model = resolveOpenRouterModel();
-      const openrouter = await callOpenRouterPatientLlm(openrouterKey, model, prompt, question);
+      const openrouter = await callOpenRouterPatientLlm(openrouterKey, prompt, question);
       if (openrouter) return openrouter;
     }
 

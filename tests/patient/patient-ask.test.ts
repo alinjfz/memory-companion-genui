@@ -54,6 +54,47 @@ test("generatePatientAnswer returns offline source when OFFLINE=1", async () => 
   }
 });
 
+test("generatePatientAnswer uses LLM plain-text response when JSON is missing", async () => {
+  const { profile } = seedDemoPatientRecord();
+  const restoreOffline = withEnv("OFFLINE", undefined);
+  const restoreKey = withEnv("OPENROUTER_API_KEY", "test-key");
+  const restoreGemini = withEnv("GEMINI_API_KEY", undefined);
+  const restoreModel = withEnv("OPENROUTER_MODEL", "openrouter/free");
+  const restoreFetch = mockFetchOnce(async () => {
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: "You are safe at home in Bristol with Helen nearby.",
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  });
+
+  try {
+    const fallback = fallbackAskMoment("Where am I?", profile, 0, 1);
+    const result = await generatePatientAnswer({
+      profile,
+      question: "Where am I?",
+      step: 0,
+      total: 1,
+      fallback,
+    });
+    assert.equal(result.source, "llm");
+    assert.match(result.moment.body, /Bristol/i);
+  } finally {
+    restoreFetch();
+    restoreModel();
+    restoreGemini();
+    restoreKey();
+    restoreOffline();
+  }
+});
+
 test("generatePatientAnswer uses LLM when API key is configured", async () => {
   const { profile } = seedDemoPatientRecord();
   const restoreOffline = withEnv("OFFLINE", undefined);

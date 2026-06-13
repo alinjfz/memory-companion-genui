@@ -17,6 +17,7 @@
   --input: #e8e3dd;
   --ring: rgba(45, 106, 159, 0.28);
   --radius: 20px;
+  --memory-photo-ratio: 4 / 3;
   --surface-soft: #f4f0eb;
   --ink: #17212b;
   --ink-2: #55606d;
@@ -971,18 +972,23 @@ textarea {
   border-color: color-mix(in srgb, var(--moment-accent) 28%, white);
 }
 
-.patient-moment-card.mood-memory .patient-moment-photo {
+.patient-moment-card.mood-memory .patient-moment-photo,
+.patient-moment-photo {
   width: min(100%, 18rem);
-  aspect-ratio: 4 / 3;
-  border-radius: 1.25rem;
+  aspect-ratio: var(--memory-photo-ratio, 4 / 3);
+  border-radius: calc(var(--radius) + 2px);
   overflow: hidden;
-  box-shadow: 0 16px 40px rgba(45, 60, 80, 0.16);
+  box-shadow: 0 16px 36px rgba(37, 40, 48, 0.12);
+  background: rgba(22, 48, 66, 0.06);
 }
 
-.patient-moment-card.mood-memory .patient-moment-photo img {
+.patient-moment-card.mood-memory .patient-moment-photo img,
+.patient-moment-photo img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .patient-moment-card.mood-talk {
@@ -998,19 +1004,6 @@ textarea {
   background: color-mix(in srgb, var(--moment-accent) 16%, white);
   font-size: 2rem;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.patient-moment-photo {
-  width: min(100%, 18rem);
-  border-radius: calc(var(--radius) + 2px);
-  overflow: hidden;
-  box-shadow: 0 16px 36px rgba(37, 40, 48, 0.12);
-}
-
-.patient-moment-photo img {
-  display: block;
-  width: 100%;
-  height: auto;
 }
 
 .patient-moment-title {
@@ -1815,8 +1808,12 @@ textarea {
 }
 
 .patient-preview-card.memory img {
-  min-height: 10rem;
+  width: 100%;
+  aspect-ratio: var(--memory-photo-ratio, 4 / 3);
+  object-fit: contain;
+  object-position: center;
   border-radius: 18px;
+  background: rgba(22, 48, 66, 0.06);
 }
 
 .error-text {
@@ -1874,9 +1871,9 @@ textarea {
   display: grid;
   place-items: center;
   width: 5rem;
-  height: 5rem;
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(126, 200, 164, 0.22), rgba(45, 106, 159, 0.08));
+  aspect-ratio: var(--memory-photo-ratio, 4 / 3);
+  border-radius: 18px;
+  background: rgba(22, 48, 66, 0.06);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -1884,7 +1881,8 @@ textarea {
 .memory-photo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .evidence-card {

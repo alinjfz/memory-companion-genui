@@ -2,6 +2,7 @@
   display: grid;
   gap: 1rem;
   width: 100%;
+  --memory-photo-ratio: 4 / 3;
 }
 
 .a2ui-pill {
@@ -49,17 +50,19 @@
 }
 
 .a2ui-memory-photo {
-  width: min(100%, 16rem);
+  width: min(100%, 18rem);
   margin: 0 auto;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--memory-photo-ratio, 4 / 3);
   border-radius: 1rem;
   overflow: hidden;
+  background: rgba(22, 48, 66, 0.06);
 }
 
 .a2ui-memory-photo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .a2ui-memory-photo-btn {
@@ -78,9 +81,46 @@
   cursor: pointer;
 }
 
-.a2ui-memory.revealed .a2ui-memory-photo-btn {
-  cursor: default;
-  pointer-events: none;
+.a2ui-memory-inline {
+  text-align: center;
+}
+
+.a2ui-memory-inline h2 {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 1.35rem;
+}
+
+.a2ui-memory-photo-inline {
+  width: min(100%, 12rem);
+  margin: 0 auto;
+}
+
+.a2ui-memory-inline-rel {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--moment-text, var(--text));
+  opacity: 0.85;
+}
+
+.a2ui-memory-inline-story {
+  margin: 0.65rem 0 0;
+  font-size: 1.2rem;
+  line-height: 1.45;
+  font-weight: 650;
+  color: var(--moment-text, var(--text));
+}
+
+.a2ui-memory-open-btn {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  font: inherit;
 }
 
 .a2ui-memory-tap {
