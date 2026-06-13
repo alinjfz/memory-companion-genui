@@ -14,6 +14,95 @@ export type EvidenceCard = {
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_OPENROUTER_MODEL = "amazon/nova-lite-v1";
+
+function resolveOpenRouterModel() {
+  return process.env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL;
+}
+
+function openRouterHeaders(apiKey: string) {
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": process.env.APP_URL?.trim() || "http://localhost:3000",
+    "X-OpenRouter-Title": "Echoes",
+  };
+}
+
+function openRouterProviderConfig() {
+  const order = process.env.OPENROUTER_PROVIDER_ORDER?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return {
+    provider: {
+      allow_fallbacks: true,
+      ...(order?.length ? { order } : {}),
+    },
+  };
+}
+
+/** Amazon Nova on Bedrock often rejects json_object; try plain prompt first. */
+function jsonModeAttempts(model: string): boolean[] {
+  if (model.startsWith("amazon/")) return [false, true];
+  return [true, false];
+}
+
+function logOpenRouterError(status: number, detail: string) {
+  console.warn("[echoes] OpenRouter LLM failed:", status, detail.slice(0, 240));
+  try {
+    const parsed = JSON.parse(detail) as {
+      error?: { metadata?: { is_byok?: boolean; provider_name?: string } };
+    };
+    if (status === 403 && parsed.error?.metadata?.is_byok) {
+      console.warn(
+        "[echoes] Bedrock BYOK auth failed (OpenRouter API key is fine). " +
+          "Fix AWS Bedrock credentials at https://openrouter.ai/settings/byok " +
+          "or disable 'Always use for this provider' to use OpenRouter credits.",
+      );
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+type OpenRouterMessage = { role: "system" | "user" | "assistant"; content: string };
+
+async function callOpenRouterChat(params: {
+  apiKey: string;
+  model: string;
+  messages: OpenRouterMessage[];
+  temperature: number;
+  maxTokens?: number;
+}): Promise<string | null> {
+  for (const useJsonMode of jsonModeAttempts(params.model)) {
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: openRouterHeaders(params.apiKey),
+      body: JSON.stringify({
+        model: params.model,
+        messages: params.messages,
+        temperature: params.temperature,
+        ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
+        ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
+        ...openRouterProviderConfig(),
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      logOpenRouterError(response.status, detail);
+      continue;
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+    };
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content === "string" && content.trim()) return content;
+  }
+
+  return null;
+}
 
 function cleanJson(text: string) {
   return text
@@ -50,40 +139,25 @@ async function callOpenRouter(query: string): Promise<EvidenceCard | null> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) return null;
 
-  const model = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4o-mini";
-  const response = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": process.env.APP_URL?.trim() || "http://localhost:3000",
-      "X-OpenRouter-Title": "Echoes",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Return only JSON with keys suggestion, source, url, confidence, summary. Keep it short and practical.",
-        },
-        {
-          role: "user",
-          content: `Question: ${query}`,
-        },
-      ],
-      temperature: 0.2,
-    }),
+  const model = resolveOpenRouterModel();
+  const content = await callOpenRouterChat({
+    apiKey,
+    model,
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Return only JSON with keys suggestion, source, url, confidence, summary. Keep it short and practical.",
+      },
+      {
+        role: "user",
+        content: `Question: ${query}`,
+      },
+    ],
   });
 
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-  };
-
-  const content = data.choices?.[0]?.message?.content;
-  return typeof content === "string" ? parseEvidence(content) : null;
+  return content ? parseEvidence(content) : null;
 }
 
 async function callGemini(query: string): Promise<EvidenceCard | null> {
@@ -147,16 +221,45 @@ type PatientMomentDraft = {
   okayLabel?: string;
 };
 
-function parsePatientMoment(raw: string): PatientMomentDraft | null {
+function extractJsonObject(raw: string): string | null {
+  const cleaned = cleanJson(raw);
   try {
-    const parsed = JSON.parse(cleanJson(raw)) as PatientMomentDraft;
-    if (typeof parsed.title === "string" && typeof parsed.body === "string") {
-      return parsed;
+    JSON.parse(cleaned);
+    return cleaned;
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try {
+      JSON.parse(match[0]);
+      return match[0];
+    } catch {
+      return null;
+    }
+  }
+}
+
+function parsePatientMoment(raw: string, question?: string): PatientMomentDraft | null {
+  const jsonText = extractJsonObject(raw);
+  if (!jsonText) return null;
+
+  try {
+    const parsed = JSON.parse(jsonText) as PatientMomentDraft;
+    if (typeof parsed.body === "string" && parsed.body.trim()) {
+      return {
+        ...parsed,
+        title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title : question?.trim(),
+      };
     }
   } catch {
     return null;
   }
   return null;
+}
+
+export type PatientAnswerSource = "llm" | "fallback" | "offline";
+
+export function isPatientLlmConfigured() {
+  return Boolean(process.env.OPENROUTER_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim());
 }
 
 const PATIENT_SYSTEM_PROMPT = `You write for a patient companion app called Echoes.
@@ -171,40 +274,41 @@ Rules:
 Return only JSON with keys: title, body, speakText, okayLabel, theme.
 theme must include: mood, accent (hex), surface (css gradient), text (hex), icon (emoji).`;
 
-async function callPatientLlm(prompt: string): Promise<PatientMomentDraft | null> {
-  const timeoutMs = 8000;
+async function callOpenRouterPatientLlm(
+  openrouterKey: string,
+  model: string,
+  prompt: string,
+  question?: string,
+): Promise<PatientMomentDraft | null> {
+  const content = await callOpenRouterChat({
+    apiKey: openrouterKey,
+    model,
+    temperature: 0.55,
+    maxTokens: 512,
+    messages: [
+      { role: "system", content: PATIENT_SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ],
+  });
+
+  if (!content) return null;
+
+  const parsed = parsePatientMoment(content, question);
+  if (!parsed) {
+    console.warn("[echoes] OpenRouter returned unparseable JSON for patient ask");
+  }
+  return parsed;
+}
+
+async function callPatientLlm(prompt: string, question?: string): Promise<PatientMomentDraft | null> {
+  const timeoutMs = 25_000;
 
   const run = async (): Promise<PatientMomentDraft | null> => {
     const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
     if (openrouterKey) {
-      const model = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4o-mini";
-      const response = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${openrouterKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": process.env.APP_URL?.trim() || "http://localhost:3000",
-          "X-OpenRouter-Title": "Echoes",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: PATIENT_SYSTEM_PROMPT },
-            { role: "user", content: prompt },
-          ],
-          temperature: 0.4,
-        }),
-      });
-      if (response.ok) {
-        const data = (await response.json()) as {
-          choices?: Array<{ message?: { content?: string | null } }>;
-        };
-        const content = data.choices?.[0]?.message?.content;
-        if (typeof content === "string") {
-          const parsed = parsePatientMoment(content);
-          if (parsed) return parsed;
-        }
-      }
+      const model = resolveOpenRouterModel();
+      const openrouter = await callOpenRouterPatientLlm(openrouterKey, model, prompt, question);
+      if (openrouter) return openrouter;
     }
 
     const geminiKey = process.env.GEMINI_API_KEY?.trim();
@@ -217,6 +321,10 @@ async function callPatientLlm(prompt: string): Promise<PatientMomentDraft | null
           "x-goog-api-key": geminiKey,
         },
         body: JSON.stringify({
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.55,
+          },
           contents: [
             {
               parts: [{ text: `${PATIENT_SYSTEM_PROMPT}\n\n${prompt}` }],
@@ -233,9 +341,13 @@ async function callPatientLlm(prompt: string): Promise<PatientMomentDraft | null
           .join("")
           .trim();
         if (content) {
-          const parsed = parsePatientMoment(content);
+          const parsed = parsePatientMoment(content, question);
           if (parsed) return parsed;
+          console.warn("[echoes] Gemini returned unparseable JSON for patient ask");
         }
+      } else {
+        const detail = await response.text().catch(() => "");
+        console.warn("[echoes] Gemini LLM failed:", response.status, detail.slice(0, 240));
       }
     }
 
@@ -298,38 +410,60 @@ export async function generatePatientAnswer(params: {
   total: number;
   fallback: PatientMoment;
   memoryPolicies?: Record<string, MemoryPolicy>;
-}): Promise<PatientMoment> {
-  if (process.env.OFFLINE === "1") return params.fallback;
+  matchedMemory?: PatientProfile["key_memories"][number];
+}): Promise<{ moment: PatientMoment; source: PatientAnswerSource }> {
+  if (process.env.OFFLINE === "1") {
+    return { moment: params.fallback, source: "offline" };
+  }
 
-  const prompt = `Answer the patient's spoken question using ALL profile data below.
-If a specific memory matches, write as a warm memory card (title + story).
-For orientation questions answer clearly and briefly:
-- "where am I" → safe at home in their location_area
-- "who am I" → first name only, reassuring
-- "what day/time" → today in Europe/London
-- "what should I do" → next daily task from their plan
-Never mention Alzheimer's or dementia. Max 10 words per sentence.
-Question: ${params.question}
-Full patient profile: ${JSON.stringify(profileContextForLlm(params.profile, params.memoryPolicies))}`;
+  if (!isPatientLlmConfigured()) {
+    return { moment: params.fallback, source: "fallback" };
+  }
 
-  const draft = await callPatientLlm(prompt);
-  if (!draft?.body) return params.fallback;
+  const memoryHint = params.matchedMemory
+    ? `\nThe question likely relates to this memory — weave in its details:\n${JSON.stringify({
+        title: params.matchedMemory.title,
+        story: params.matchedMemory.story,
+        relationship: params.matchedMemory.relationship,
+        policy: params.memoryPolicies?.[params.matchedMemory.id] ?? "show",
+      })}`
+    : "";
+
+  const prompt = `The patient just asked a spoken question. Write a warm, personal answer using their REAL profile data below.
+Rules:
+- Pull in specific names, places, and story details from key_memories when relevant.
+- Do NOT give generic reassurance alone — mention at least one concrete detail from their memories or family.
+- Max 10 words per sentence. Never mention Alzheimer's or dementia.
+- Use their first name only once if needed.
+- title: use the patient's question (shortened if needed)
+- body: 1–2 short sentences grounded in their data
+Question: "${params.question}"
+Patient profile (use this data — especially key_memories stories):
+${JSON.stringify(profileContextForLlm(params.profile, params.memoryPolicies), null, 2)}${memoryHint}`;
+
+  const draft = await callPatientLlm(prompt, params.question);
+  if (!draft?.body) {
+    return { moment: params.fallback, source: "fallback" };
+  }
 
   return {
-    ...params.fallback,
-    title: draft.title ?? params.fallback.title,
-    body: draft.body,
-    speakText: draft.speakText ?? draft.body,
-    kind: params.fallback.imageUrl ? "memory" : params.fallback.kind,
-    theme: {
-      ...params.fallback.theme,
-      accent: draft.theme?.accent ?? params.fallback.theme.accent,
-      surface: draft.theme?.surface ?? params.fallback.theme.surface,
-      text: draft.theme?.text ?? params.fallback.theme.text,
-      icon: draft.theme?.icon ?? params.fallback.theme.icon,
+    moment: {
+      ...params.fallback,
+      title: draft.title ?? params.question.trim(),
+      body: draft.body,
+      speakText: draft.speakText ?? draft.body,
+      kind: params.fallback.imageUrl ? "memory" : params.fallback.kind,
+      theme: {
+        ...params.fallback.theme,
+        accent: draft.theme?.accent ?? params.fallback.theme.accent,
+        surface: draft.theme?.surface ?? params.fallback.theme.surface,
+        text: draft.theme?.text ?? params.fallback.theme.text,
+        icon: draft.theme?.icon ?? params.fallback.theme.icon,
+      },
+      imageUrl: params.fallback.imageUrl,
+      memoryId: params.fallback.memoryId,
     },
-    imageUrl: params.fallback.imageUrl,
-    memoryId: params.fallback.memoryId,
+    source: "llm",
   };
 }
 

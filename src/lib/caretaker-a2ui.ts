@@ -1,5 +1,5 @@
 import type { Memory, PatientProfile } from "@/lib/echoes";
-import { createMemoryImage } from "@/lib/app-state";
+import { createMemoryImage } from "@/lib/memory-image";
 import type { MemoryPolicy } from "@/lib/app-state-helpers";
 import { themeForMemory } from "@/lib/patient-moments";
 import { CATALOG_ID, type A2UISurface } from "@/a2ui/catalog/definitions";

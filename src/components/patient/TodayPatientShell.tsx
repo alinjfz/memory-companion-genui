@@ -33,7 +33,23 @@ type StepPayload = {
   speakText?: string;
   mode?: PatientFlowMode;
   theme?: { accent: string; surface: string; text: string };
+  componentType?: string;
 };
+
+function currentCardLabel(componentType?: string) {
+  switch (componentType) {
+    case "PatientGreeting":
+      return "Good morning";
+    case "DailyTask":
+      return "Today's step";
+    case "MemoryCard":
+      return "A memory";
+    case "MedicationReminder":
+      return "Medicine";
+    default:
+      return "Your moment";
+  }
+}
 
 type DashboardAnchor = {
   label: string;
@@ -227,6 +243,7 @@ function PatientDashboard() {
   const [askSurface, setAskSurface] = useState<A2UISurface | null>(null);
   const [askTheme, setAskTheme] = useState<{ accent: string; surface: string; text: string } | undefined>();
   const [askLoading, setAskLoading] = useState(false);
+  const [cardComponentType, setCardComponentType] = useState<string | undefined>();
   const [lastAskQuestion, setLastAskQuestion] = useState("");
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -291,6 +308,7 @@ function PatientDashboard() {
       setStep(data.step ?? 0);
       setTotal(data.total ?? 1);
       setCardTheme(data.theme);
+      setCardComponentType(data.componentType);
       if (data.mode === "morning") morningStepRef.current = data.step ?? 0;
       if (data.speakText) speak(data.speakText);
     },
@@ -301,16 +319,37 @@ function PatientDashboard() {
     return patientStepBus.subscribe((payload: PatientStepPayload) => applyStep(payload));
   }, [applyStep]);
 
+  const loadAskStep = useCallback(
+    async (message: string) => {
+      const code = readSession().patientCode || accessCode;
+      if (!code) return;
+      setAskLoading(true);
+      setError("");
+      try {
+        const data = await fetchStepFallback(code, {
+          action: "ask",
+          message,
+          step: morningStepRef.current,
+        });
+        applyStep({ ...data, mode: "ask" });
+      } catch {
+        setError("Your companion is quiet. Try again in a moment.");
+      } finally {
+        setAskLoading(false);
+      }
+    },
+    [accessCode, applyStep],
+  );
+
   const loadStep = useCallback(
     async (payload: Record<string, string | number>) => {
       const code = readSession().patientCode || accessCode;
       if (!code) return;
-      const isAsk = payload.action === "ask";
-      if (isAsk) {
-        setAskLoading(true);
-      } else {
-        setBusy(true);
+      if (payload.action === "ask") {
+        await loadAskStep(String(payload.message ?? ""));
+        return;
       }
+      setBusy(true);
       setError("");
       patientStepBus.reset();
 
@@ -359,14 +398,10 @@ function PatientDashboard() {
           setError("Something went quiet. Try again.");
         }
       } finally {
-        if (isAsk) {
-          setAskLoading(false);
-        } else {
-          setBusy(false);
-        }
+        setBusy(false);
       }
     },
-    [accessCode, agent, applyStep],
+    [accessCode, agent, applyStep, loadAskStep],
   );
 
   useEffect(() => {
@@ -442,7 +477,7 @@ function PatientDashboard() {
     setAskText("");
     setLastAskQuestion(trimmed);
     spokeRef.current = "";
-    void loadStep({ action: "ask", message: trimmed, step: morningStepRef.current });
+    void loadAskStep(trimmed);
   }
 
   function startListening() {
@@ -589,14 +624,25 @@ function PatientDashboard() {
       <section className="patient-dashboard-shell">
         <header className="patient-dashboard-header">
           <div className="patient-dashboard-heading">
+            <p className="patient-dashboard-kicker">Your safe companion</p>
             <h1>Hi, {profile?.first_name || "Home"}</h1>
             <p className="patient-dashboard-subtitle">
               {clock.day} · {clock.date} · {clock.time}
             </p>
           </div>
+          <p className="patient-dashboard-status" aria-live="polite">
+            {busy ? "Thinking..." : "You are safe"}
+          </p>
         </header>
 
-        <div className="patient-a2ui-stage" aria-live="polite">
+        <section className="patient-dashboard-card" aria-label="Today's card">
+          <div className="patient-dashboard-card-head">
+            <span className="patient-dashboard-label">{currentCardLabel(cardComponentType)}</span>
+            <span className="patient-dashboard-step">
+              {step + 1} of {total}
+            </span>
+          </div>
+          <div className="patient-a2ui-stage" aria-live="polite">
           <div className="patient-a2ui-nav">
             <button
               className="patient-a2ui-nav-btn"
@@ -631,7 +677,8 @@ function PatientDashboard() {
               Next
             </button>
           </div>
-        </div>
+          </div>
+        </section>
 
         {profile?.key_memories.length ? (
           <section className="patient-memory-gallery" aria-label="Memory photos">
@@ -684,6 +731,7 @@ function PatientDashboard() {
 
         <section className="patient-ask-panel" aria-label="Ask me anything">
           <h2 className="patient-ask-title">Ask me anything</h2>
+          <p className="patient-ask-lead">Speak or type. I answer using your memories and care plan.</p>
           <form
             className="patient-ask-form"
             onSubmit={(e) => {
@@ -729,7 +777,7 @@ function PatientDashboard() {
               </button>
             ))}
           </div>
-          {askLoading ? <p className="patient-ask-note">One moment...</p> : null}
+          {askLoading ? <p className="patient-ask-note">Thinking with your memories...</p> : null}
           {lastAskQuestion ? <p className="patient-ask-question">You asked: {lastAskQuestion}</p> : null}
           {askSurface ? (
             <div className="patient-ask-result" aria-live="polite">

@@ -1,7 +1,6 @@
 import { getState, updateActivity } from "@/lib/app-state";
 import { activatePatient, connectPatient, getActiveRecord } from "@/lib/patient-store";
 import {
-  buildAskStep,
   buildMorningStepPlan,
   buildMusicCardSurface,
   buildPanicStepPlan,
@@ -10,9 +9,10 @@ import {
   type PatientFlowMode,
   type PatientStep,
 } from "@/lib/a2ui-builder";
+import { createMemoryImage } from "@/lib/memory-image";
 import { surfaceToA2UIOps } from "@/lib/a2ui-ops";
 import { fallbackAskMoment, findMemoryForQuestion, type MomentKind } from "@/lib/patient-moments";
-import { generatePatientAnswer, generatePatientMoment } from "@/lib/llm";
+import { generatePatientAnswer, generatePatientMoment, type PatientAnswerSource } from "@/lib/llm";
 import { speakCalmingMessage } from "@/lib/elevenlabs";
 import { linkupMusicSearch } from "@/lib/linkup";
 import type { A2UISurface } from "@/a2ui/catalog/definitions";
@@ -27,6 +27,8 @@ export type PatientStepPayload = {
   mode: PatientFlowMode;
   theme?: { accent: string; surface: string; text: string };
   a2ui_operations?: ReturnType<typeof surfaceToA2UIOps>;
+  source?: PatientAnswerSource;
+  componentType?: string;
 };
 
 export type PatientActionInput = {
@@ -194,6 +196,7 @@ function stepResponse(
   index: number,
   total: number,
   mode: PatientFlowMode,
+  extras?: { source?: PatientAnswerSource },
 ): PatientStepPayload {
   const surface = singleSurface(step.component);
   return {
@@ -206,6 +209,8 @@ function stepResponse(
     mode,
     theme: step.theme,
     a2ui_operations: surfaceToA2UIOps(surface, `patient-step-${index}`),
+    source: extras?.source,
+    componentType: step.component.component,
   };
 }
 
@@ -274,77 +279,58 @@ export async function resolvePatientStep(
 
   if (action === "ask" && message) {
     const memory = findMemoryForQuestion(message, profile, state.memoryPolicies);
-    let askStep: PatientStep;
-    if (memory) {
-      askStep = buildAskStep(profile, memory, state.memoryPolicies[memory.id] ?? "show");
-    } else {
-      const fallback = fallbackAskMoment(message, profile, stepIndex, 1, state.memoryPolicies);
-      const answer = await generatePatientAnswer({
-        profile,
-        question: message,
-        step: stepIndex,
-        total: 1,
-        fallback,
-        memoryPolicies: state.memoryPolicies,
-      });
-      if (fallback.imageUrl || answer.imageUrl) {
-        askStep = buildAskStep(
-          profile,
-          {
-            id: fallback.memoryId ?? "ask",
-            title: answer.title ?? fallback.title,
-            story: answer.body,
-            photoHint: fallback.theme.icon,
-            relationship: "family",
-          },
-          "show",
-        );
-        const imageUrl = answer.imageUrl ?? fallback.imageUrl;
-        if (imageUrl && askStep.component.component === "MemoryCard") {
-          askStep = {
-            ...askStep,
-            component: {
-              ...askStep.component,
-              props: {
-                ...askStep.component.props,
-                imageUrl,
-              },
-            },
-          };
-        }
-      } else {
-        askStep = buildTalkStep(profile, answer.body, answer.title ?? message);
-      }
+    const fallback = fallbackAskMoment(message, profile, stepIndex, 1, state.memoryPolicies);
+    const { moment: answer, source } = await generatePatientAnswer({
+      profile,
+      question: message,
+      step: stepIndex,
+      total: 1,
+      fallback,
+      memoryPolicies: state.memoryPolicies,
+      matchedMemory: memory ?? undefined,
+    });
+
+    const cardTitle = message.trim();
+    let askStep = buildTalkStep(profile, answer.body, cardTitle);
+
+    const memoryRecord =
+      memory ??
+      (answer.memoryId ? profile.key_memories.find((item) => item.id === answer.memoryId) : null);
+
+    if (memoryRecord && askStep.component.component === "MemoryCard") {
       askStep = {
         ...askStep,
-        speakText: answer.speakText,
-        component:
-          askStep.component.component === "MemoryCard"
-            ? {
-                ...askStep.component,
-                props: {
-                  ...askStep.component.props,
-                  title: answer.title ?? message,
-                },
-              }
-            : askStep.component,
-        theme: {
-          accent: answer.theme.accent,
-          surface: answer.theme.surface,
-          text: answer.theme.text,
+        component: {
+          ...askStep.component,
+          props: {
+            ...askStep.component.props,
+            title: cardTitle,
+            story: answer.body,
+            photoHint: memoryRecord.photoHint,
+            relationship: memoryRecord.relationship,
+            imageUrl: createMemoryImage(memoryRecord),
+          },
         },
       };
     }
-    if (memory) {
-      askStep = await enrichStep(askStep, profile, 0, 1);
-    }
+
+    askStep = {
+      ...askStep,
+      speakText: answer.speakText,
+      theme: {
+        accent: answer.theme.accent,
+        surface: answer.theme.surface,
+        text: answer.theme.text,
+      },
+    };
+
     updateActivity({
       timestamp: nowTimestamp(),
       type: "memory_viewed",
-      description: `Asked: ${message.slice(0, 80)}`,
+      description: `Asked: ${message.slice(0, 80)} (${source})`,
       severity: "normal",
     });
-    return stepResponse(askStep, 0, 1, "ask");
+    return stepResponse(askStep, 0, 1, "ask", { source });
   }
 
   const plan = buildMorningStepPlan(profile, state.memoryPolicies);

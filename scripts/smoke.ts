@@ -16,6 +16,7 @@ function run(name: string, cmd: string, args: string[]) {
 }
 
 run("typecheck", "pnpm", ["typecheck"]);
+run("patient tests", "pnpm", ["test:runtime"]);
 
 const py = spawnSync(
   "python3",

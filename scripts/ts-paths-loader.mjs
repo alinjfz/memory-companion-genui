@@ -29,6 +29,12 @@ function resolveLocal(specifier) {
 }
 
 export async function resolve(specifier, context, defaultResolve) {
+  if (specifier === "server-only") {
+    return {
+      url: pathToFileURL(resolvePath(root, "scripts/server-only-stub.mjs")).href,
+      shortCircuit: true,
+    };
+  }
   const local = resolveLocal(specifier);
   if (local) {
     return { url: local, shortCircuit: true };

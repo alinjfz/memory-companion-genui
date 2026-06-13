@@ -432,8 +432,85 @@
   grid-template-columns: 1fr;
 }
 
-.patient-a2ui-stage {
-  padding: 0.5rem 0 0.25rem;
+.patient-a2ui-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.95rem 1.1rem;
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid rgba(126, 200, 164, 0.28);
+  background: linear-gradient(135deg, rgba(240, 251, 246, 0.92) 0%, rgba(255, 255, 255, 0.88) 100%);
+}
+
+.patient-a2ui-banner-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(45, 106, 159, 0.12);
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.patient-a2ui-banner p {
+  margin: 0;
+  flex: 1 1 16rem;
+  color: var(--text-muted);
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+
+.patient-ask-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.patient-ask-powered {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.patient-ask-lead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.patient-ask-source {
+  justify-self: start;
+  display: inline-flex;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.patient-ask-source-llm {
+  background: rgba(45, 106, 159, 0.12);
+  color: var(--primary);
+}
+
+.patient-ask-source-fallback,
+.patient-ask-source-offline {
+  background: rgba(196, 132, 106, 0.14);
+  color: #7a4f3a;
+}
+
+.patient-shell .sponsor-footer {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.5rem;
 }
 
 .patient-a2ui-nav {

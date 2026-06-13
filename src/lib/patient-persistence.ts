@@ -1,46 +1,64 @@
+import "server-only";
+
+import fs from "node:fs";
+import path from "node:path";
+
 export type PersistedPatientStore = {
   patients: Record<string, unknown>;
   activeCode: string | null;
 };
 
-const STORE_DIR = ".echoes";
-const STORE_FILE = ".echoes/patients.json";
+/** Local database folder — set ECHOES_DATA_DIR to override (absolute path). */
+export function getEchoesDataDir() {
+  const configured = process.env.ECHOES_DATA_DIR?.trim();
+  if (configured) return path.resolve(configured);
+  return path.join(process.cwd(), ".echoes");
+}
 
-type NodeFs = {
-  mkdirSync: (path: string, options?: { recursive?: boolean }) => void;
-  readFileSync: (path: string, options: "utf8") => string;
-  writeFileSync: (path: string, data: string, options: "utf8") => void;
-};
+export function getPatientsFilePath() {
+  return path.join(getEchoesDataDir(), "patients.json");
+}
 
-function getNodeFs(): NodeFs | null {
-  if (typeof window !== "undefined") return null;
+export function getKvStoreFilePath() {
+  return path.join(getEchoesDataDir(), "kv-store.json");
+}
+
+function ensureDir(dir: string) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+export function loadJsonFile<T>(filePath: string): T | null {
   try {
-    const requireFn = Function("return require")() as (id: string) => unknown;
-    return requireFn("node:fs") as NodeFs;
-  } catch {
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.error(`[echoes] Failed to read ${filePath}:`, error);
     return null;
+  }
+}
+
+export function saveJsonFile(filePath: string, data: unknown) {
+  try {
+    ensureDir(path.dirname(filePath));
+    const tmp = `${filePath}.tmp`;
+    fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    fs.renameSync(tmp, filePath);
+  } catch (error) {
+    console.error(`[echoes] Failed to write ${filePath}:`, error);
+    throw error;
   }
 }
 
 export function loadPatientStore(): PersistedPatientStore | null {
-  const fs = getNodeFs();
-  if (!fs) return null;
-  try {
-    const raw = fs.readFileSync(STORE_FILE, "utf8");
-    const parsed = JSON.parse(raw) as PersistedPatientStore;
-    if (!parsed || typeof parsed !== "object" || !parsed.patients) return null;
-    return {
-      patients: parsed.patients,
-      activeCode: parsed.activeCode ?? null,
-    };
-  } catch {
-    return null;
-  }
+  const parsed = loadJsonFile<PersistedPatientStore>(getPatientsFilePath());
+  if (!parsed || typeof parsed !== "object" || !parsed.patients) return null;
+  return {
+    patients: parsed.patients,
+    activeCode: parsed.activeCode ?? null,
+  };
 }
 
 export function savePatientStore(store: PersistedPatientStore) {
-  const fs = getNodeFs();
-  if (!fs) return;
-  fs.mkdirSync(STORE_DIR, { recursive: true });
-  fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), "utf8");
+  saveJsonFile(getPatientsFilePath(), store);
 }

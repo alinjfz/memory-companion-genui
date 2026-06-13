@@ -5,7 +5,7 @@ import {
   type Medication,
   type PatientProfile,
 } from "@/lib/echoes";
-import { createMemoryImage } from "@/lib/app-state";
+import { createMemoryImage } from "@/lib/memory-image";
 import type { MemoryPolicy } from "@/lib/app-state-helpers";
 
 export type MomentKind = "greeting" | "task" | "memory" | "medication" | "talk" | "done";
@@ -293,39 +293,81 @@ export function fallbackMoment(
   };
 }
 
+const MEMORY_STOP_WORDS = new Set([
+  "what",
+  "where",
+  "when",
+  "who",
+  "whom",
+  "have",
+  "does",
+  "should",
+  "would",
+  "could",
+  "about",
+  "there",
+  "this",
+  "that",
+  "with",
+  "from",
+  "your",
+  "mine",
+  "tell",
+  "know",
+  "remember",
+  "help",
+  "need",
+  "want",
+  "like",
+  "much",
+  "very",
+  "some",
+  "many",
+  "today",
+  "now",
+  "home",
+  "safe",
+]);
+
 export function findMemoryForQuestion(
   message: string,
   profile: PatientProfile,
   memoryPolicies: Record<string, MemoryPolicy> = {},
 ): Memory | null {
-  const lower = message.toLowerCase();
-
-  for (const memory of profile.key_memories) {
-    const policy = memoryPolicies[memory.id] ?? "show";
-    if (policy === "hide") continue;
-
-    const haystack = `${memory.title} ${memory.story} ${memory.relationship}`.toLowerCase();
-    if (lower.split(/\s+/).some((word) => word.length > 3 && haystack.includes(word))) {
-      return memory;
-    }
-  }
+  const lower = message.toLowerCase().trim();
 
   for (const member of profile.family_members) {
-    if (lower.includes(member.name.toLowerCase())) {
+    const name = member.name.toLowerCase();
+    if (name.length > 2 && lower.includes(name)) {
       const match = profile.key_memories.find((memory) => {
         const policy = memoryPolicies[memory.id] ?? "show";
         if (policy === "hide") return false;
         return (
           memory.relationship.toLowerCase().includes(member.relationship.toLowerCase()) ||
-          memory.story.toLowerCase().includes(member.name.toLowerCase()) ||
-          memory.title.toLowerCase().includes(member.name.toLowerCase())
+          memory.story.toLowerCase().includes(name) ||
+          memory.title.toLowerCase().includes(name)
         );
       });
       if (match) return match;
     }
   }
 
-  if (/child|daughter|son|grand|baby|wife|husband|partner/.test(lower)) {
+  for (const memory of profile.key_memories) {
+    const policy = memoryPolicies[memory.id] ?? "show";
+    if (policy === "hide") continue;
+
+    const title = memory.title.toLowerCase().trim();
+    if (title.length > 4 && lower.includes(title)) {
+      return memory;
+    }
+
+    const titleWords = title.split(/\s+/).filter((word) => word.length > 4 && !MEMORY_STOP_WORDS.has(word));
+    if (titleWords.some((word) => lower.includes(word))) {
+      return memory;
+    }
+  }
+
+  if (/child|daughter|son|grand|baby|wife|husband|partner|family/.test(lower)) {
     const keyword = lower.includes("grand")
       ? "grand"
       : lower.includes("daughter")
@@ -334,7 +376,9 @@ export function findMemoryForQuestion(
           ? "son"
           : lower.includes("wife") || lower.includes("husband")
             ? "wife"
-            : "child";
+            : lower.includes("family")
+              ? "family"
+              : "child";
     const match = profile.key_memories.find((memory) => {
       const policy = memoryPolicies[memory.id] ?? "show";
       return policy !== "hide" && memory.relationship.toLowerCase().includes(keyword);

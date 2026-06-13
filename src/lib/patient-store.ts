@@ -1,8 +1,11 @@
+import "server-only";
+
 import { createEmptyProfile, type ActivityEvent, type PatientProfile } from "@/lib/echoes";
-import type { AppState } from "@/lib/app-state";
+import type { AppState } from "@/lib/app-state-types";
 import type { MemoryPolicy, MusicTrack, PatientMode } from "@/lib/app-state-helpers";
 import { buildMemoryPoliciesFromProfile } from "@/lib/app-state-helpers";
 import { hashPassword, normalizeEmail, verifyPassword } from "@/lib/auth-crypto";
+import { loadPatientStore, savePatientStore, getPatientsFilePath } from "@/lib/patient-persistence";
 
 export interface PatientRecord {
   accessCode: string;
@@ -27,53 +30,8 @@ type RootStore = {
 
 type Holder = typeof globalThis & {
   __echoesPatients?: RootStore;
+  __echoesPatientsLoaded?: boolean;
 };
-
-type PersistedPatientStore = {
-  patients: Record<string, unknown>;
-  activeCode: string | null;
-};
-
-function getNodeFs() {
-  if (typeof window !== "undefined") return null;
-  try {
-    const requireFn = Function("return require")() as (id: string) => unknown;
-    return requireFn("node:fs") as {
-      mkdirSync: (path: string, options?: { recursive?: boolean }) => void;
-      readFileSync: (path: string, options: "utf8") => string;
-      writeFileSync: (path: string, data: string, options: "utf8") => void;
-    };
-  } catch {
-    return null;
-  }
-}
-
-function loadPatientStore(): PersistedPatientStore | null {
-  const fs = getNodeFs();
-  if (!fs) return null;
-  try {
-    const raw = fs.readFileSync(".echoes/patients.json", "utf8");
-    const parsed = JSON.parse(raw) as PersistedPatientStore;
-    if (!parsed || typeof parsed !== "object" || !parsed.patients) return null;
-    return {
-      patients: parsed.patients,
-      activeCode: parsed.activeCode ?? null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function savePatientStore(store: PersistedPatientStore) {
-  const fs = getNodeFs();
-  if (!fs) return;
-  try {
-    fs.mkdirSync(".echoes", { recursive: true });
-    fs.writeFileSync(".echoes/patients.json", JSON.stringify(store, null, 2), "utf8");
-  } catch (error) {
-    console.error("[echoes] Failed to save patient store:", error);
-  }
-}
 
 function migrateRecord(record: PatientRecord): PatientRecord {
   return {
@@ -83,35 +41,48 @@ function migrateRecord(record: PatientRecord): PatientRecord {
       record.caretakerPasswordHash ||
       (record.caregiverPin ? hashPassword(record.caregiverPin) : hashPassword("echoes123")),
     caregiverPin: record.caregiverPin || "",
+    activity: Array.isArray(record.activity) ? record.activity : [],
+    memoryPolicies: record.memoryPolicies ?? {},
   };
+}
+
+function loadRootFromDisk(): RootStore {
+  const loaded = loadPatientStore();
+  if (!loaded) {
+    return { patients: {}, activeCode: null };
+  }
+
+  const patients = Object.fromEntries(
+    Object.entries(loaded.patients as Record<string, PatientRecord>).map(([code, record]) => [
+      code.toUpperCase(),
+      migrateRecord({ ...record, accessCode: code.toUpperCase() }),
+    ]),
+  );
+
+  const root = { patients, activeCode: loaded.activeCode?.toUpperCase() ?? null };
+  if (process.env.NODE_ENV !== "test" && Object.keys(patients).length > 0) {
+    console.info(
+      `[echoes] Loaded ${Object.keys(patients).length} patient record(s) from ${getPatientsFilePath()}`,
+    );
+  }
+  return root;
 }
 
 function getRoot(): RootStore {
   const holder = globalThis as Holder;
-  if (!holder.__echoesPatients) {
-    const loaded = loadPatientStore();
-    if (loaded) {
-      const patients = Object.fromEntries(
-        Object.entries(loaded.patients as Record<string, PatientRecord>).map(([code, record]) => [
-          code,
-          migrateRecord(record),
-        ]),
-      );
-      holder.__echoesPatients = { patients, activeCode: loaded.activeCode };
-    } else {
-      holder.__echoesPatients = { patients: {}, activeCode: null };
-    }
+  if (!holder.__echoesPatientsLoaded) {
+    holder.__echoesPatients = loadRootFromDisk();
+    holder.__echoesPatientsLoaded = true;
   }
-  return holder.__echoesPatients;
+  return holder.__echoesPatients ?? { patients: {}, activeCode: null };
 }
 
 function persistRoot(root: RootStore) {
   if (typeof window !== "undefined") return;
-  try {
-    savePatientStore(root as unknown as PersistedPatientStore);
-  } catch (error) {
-    console.error("[echoes] Failed to save patient store:", error);
-  }
+  savePatientStore({
+    patients: root.patients,
+    activeCode: root.activeCode,
+  });
 }
 
 function generateAccessCode() {
@@ -184,15 +155,27 @@ export function getActiveRecord(): PatientRecord | null {
 }
 
 export function getRecord(accessCode: string): PatientRecord | null {
-  return getRoot().patients[accessCode.toUpperCase()] ?? null;
+  return getRoot().patients[accessCode.trim().toUpperCase()] ?? null;
 }
 
 export function setActiveRecord(record: PatientRecord) {
   const root = getRoot();
-  root.patients[record.accessCode] = record;
-  root.activeCode = record.accessCode;
+  const normalized = { ...record, accessCode: record.accessCode.trim().toUpperCase() };
+  root.patients[normalized.accessCode] = normalized;
+  root.activeCode = normalized.accessCode;
   persistRoot(root);
-  return record;
+  return normalized;
+}
+
+export function updateRecord(
+  accessCode: string,
+  updater: (record: PatientRecord) => PatientRecord,
+): PatientRecord | null {
+  const normalized = accessCode.trim().toUpperCase();
+  const current = getRecord(normalized);
+  if (!current) return null;
+  const next = updater({ ...current, accessCode: normalized });
+  return setActiveRecord(next);
 }
 
 export function findPatientByEmail(email: string): PatientRecord | null {
@@ -208,8 +191,7 @@ export function createPatientAccount(caretakerName: string, email: string, passw
   const accessCode = generateAccessCode();
   const passwordHash = hashPassword(password);
   const record = emptyRecord(accessCode, caretakerName.trim(), email, passwordHash);
-  setActiveRecord(record);
-  return record;
+  return setActiveRecord(record);
 }
 
 export function signInCaretaker(email: string, password: string) {
@@ -228,8 +210,7 @@ export function createPatient(caretakerName: string, pin: string) {
   const passwordHash = hashPassword(pin);
   const record = emptyRecord(accessCode, caretakerName.trim(), `${accessCode.toLowerCase()}@echoes.local`, passwordHash);
   record.caregiverPin = pin.trim();
-  setActiveRecord(record);
-  return record;
+  return setActiveRecord(record);
 }
 
 /** @deprecated Use signInCaretaker */
@@ -265,8 +246,7 @@ export function activatePatient(accessCode: string) {
 export function updateActiveRecord(updater: (record: PatientRecord) => PatientRecord) {
   const current = getActiveRecord();
   if (!current) return null;
-  const next = updater(current);
-  return setActiveRecord(next);
+  return setActiveRecord(updater(current));
 }
 
 export function verifyCaregiverPin(accessCode: string, pin: string) {
@@ -294,4 +274,12 @@ export function applyDemoToActive(demo: {
     onboardingComplete: false,
   };
   return setActiveRecord(next);
+}
+
+/** Test helper — reset in-memory cache and reload from disk. */
+export function reloadPatientStoreFromDisk() {
+  const holder = globalThis as Holder;
+  holder.__echoesPatients = loadRootFromDisk();
+  holder.__echoesPatientsLoaded = true;
+  return holder.__echoesPatients;
 }

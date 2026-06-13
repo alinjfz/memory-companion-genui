@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { MirrorRenderer, parseA2UISurface } from "@/a2ui/MirrorRenderer";
 import { CaretakerMemoryStudio } from "@/components/caretaker/CaretakerMemoryStudio";
 import "@/a2ui/theme.css";
-import type { AppState, MemoryPolicy } from "@/lib/app-state";
+import type { AppState, MemoryPolicy } from "@/lib/app-state-types";
 import {
   createEmptyMemory,
   createEmptyProfile,

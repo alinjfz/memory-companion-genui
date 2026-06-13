@@ -1,6 +1,6 @@
 import type { PatientProfile, Stage } from "@/lib/echoes";
 import { buildMorningGreeting, createMemoryId } from "@/lib/echoes";
-import { createMemoryImage } from "@/lib/app-state";
+import { createMemoryImage } from "@/lib/memory-image";
 import type { MemoryPolicy } from "@/lib/app-state-helpers";
 import { themeForMemory } from "@/lib/patient-moments";
 import {

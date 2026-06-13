@@ -45,7 +45,7 @@ test("CopilotKit runtime config keeps AG-UI wiring intact", () => {
   assert.equal(config.runtime.agents.default, "http://localhost:8123/patient");
   assert.equal(config.runtime.agents.patient_agent, "http://localhost:8123/patient");
   assert.equal(config.runtime.a2ui.injectA2UITool, false);
-  assert.equal(config.mode, "multi-route");
+  assert.equal(config.mode, "single-route");
 });
 
 test("Linkup deep search posts the expected request and returns sources", async () => {

@@ -1,11 +1,34 @@
+import "server-only";
+
 import { createClient, type RedisClientType } from "redis";
+import { getKvStoreFilePath, loadJsonFile, saveJsonFile } from "@/lib/patient-persistence";
 
 type MemoryEntry = { value: string; expiresAt: number | null };
 
 const memoryStore = new Map<string, MemoryEntry>();
+let memoryHydrated = false;
 
 let client: RedisClientType | null = null;
 let connectPromise: Promise<RedisClientType | null> | null = null;
+
+function hydrateMemoryStore() {
+  if (memoryHydrated) return;
+  memoryHydrated = true;
+  const loaded = loadJsonFile<Record<string, MemoryEntry>>(getKvStoreFilePath());
+  if (!loaded) return;
+  const now = Date.now();
+  for (const [key, entry] of Object.entries(loaded)) {
+    if (!entry?.value) continue;
+    if (entry.expiresAt && now > entry.expiresAt) continue;
+    memoryStore.set(key, entry);
+  }
+}
+
+function persistMemoryStore() {
+  if (typeof window !== "undefined") return;
+  const payload = Object.fromEntries(memoryStore.entries());
+  saveJsonFile(getKvStoreFilePath(), payload);
+}
 
 async function getClient() {
   const url = process.env.REDIS_URL?.trim();
@@ -24,7 +47,7 @@ async function getClient() {
       client = next as RedisClientType;
       return client;
     } catch (error) {
-      console.warn("[echoes] Redis unavailable, using in-memory fallback:", error);
+      console.warn("[echoes] Redis unavailable, using disk-backed memory store:", error);
       return null;
     } finally {
       connectPromise = null;
@@ -35,20 +58,30 @@ async function getClient() {
 }
 
 function memoryGet(key: string) {
+  hydrateMemoryStore();
   const entry = memoryStore.get(key);
   if (!entry) return null;
   if (entry.expiresAt && Date.now() > entry.expiresAt) {
     memoryStore.delete(key);
+    persistMemoryStore();
     return null;
   }
   return entry.value;
 }
 
 function memorySet(key: string, value: string, ttlSeconds?: number) {
+  hydrateMemoryStore();
   memoryStore.set(key, {
     value,
     expiresAt: ttlSeconds ? Date.now() + ttlSeconds * 1000 : null,
   });
+  persistMemoryStore();
+}
+
+function memoryDel(key: string) {
+  hydrateMemoryStore();
+  memoryStore.delete(key);
+  persistMemoryStore();
 }
 
 export async function redisGet(key: string) {
@@ -86,16 +119,17 @@ export async function redisDel(key: string) {
   if (redis) {
     try {
       await redis.del(key);
+      return;
     } catch {
-      memoryStore.delete(key);
+      memoryDel(key);
+      return;
     }
-    return;
   }
-  memoryStore.delete(key);
+  memoryDel(key);
 }
 
 export async function redisPushActivity(accessCode: string, eventJson: string) {
-  const key = `echoes:activity:${accessCode}`;
+  const key = `echoes:activity:${accessCode.trim().toUpperCase()}`;
   const redis = await getClient();
   if (redis) {
     try {
@@ -113,7 +147,7 @@ export async function redisPushActivity(accessCode: string, eventJson: string) {
 }
 
 export async function redisGetActivity(accessCode: string) {
-  const key = `echoes:activity:${accessCode}`;
+  const key = `echoes:activity:${accessCode.trim().toUpperCase()}`;
   const redis = await getClient();
   if (redis) {
     try {
@@ -123,5 +157,10 @@ export async function redisGetActivity(accessCode: string) {
     }
   }
   const existing = memoryGet(key);
-  return existing ? (JSON.parse(existing) as string[]) : [];
+  if (!existing) return [];
+  try {
+    return JSON.parse(existing) as string[];
+  } catch {
+    return [];
+  }
 }

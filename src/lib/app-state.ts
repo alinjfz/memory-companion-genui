@@ -1,9 +1,12 @@
+import "server-only";
+
 import {
   createEmptyProfile,
   type ActivityEvent,
   type Memory,
   type PatientProfile,
 } from "@/lib/echoes";
+import type { AppState } from "@/lib/app-state-types";
 import {
   buildMemoryPoliciesFromProfile,
   defaultMemoryPolicy,
@@ -13,6 +16,7 @@ import {
   type PatientMode,
   type PlaybackStatus,
 } from "@/lib/app-state-helpers";
+import { createMemoryImage } from "@/lib/memory-image";
 import {
   createEmptyAppState,
   getActiveRecord,
@@ -21,23 +25,9 @@ import {
   updateActiveRecord,
 } from "@/lib/patient-store";
 
+export type { AppState, Role } from "@/lib/app-state-types";
 export type { MemoryPolicy, PatientMode, PlaybackStatus, MusicTrack } from "@/lib/app-state-helpers";
-
-export type Role = "patient" | "caretaker";
-
-export interface AppState {
-  accessCode: string;
-  caretakerName: string;
-  caretakerEmail: string;
-  profile: PatientProfile;
-  activity: ActivityEvent[];
-  memoryPolicies: Record<string, MemoryPolicy>;
-  caregiverPin: string;
-  currentMode: PatientMode;
-  currentTrack: MusicTrack | null;
-  patientPrompt: string;
-  onboardingComplete: boolean;
-}
+export { createMemoryImage } from "@/lib/memory-image";
 
 export interface PatientCardBase {
   id: string;
@@ -128,32 +118,6 @@ const MUSIC_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3
 
 function makeActivityId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function memoryArt(memory: Memory) {
-  const seed = memory.id
-    .split("")
-    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const hue = seed % 360;
-  const title = memory.title.replace(/'/g, "");
-  const story = memory.photoHint || memory.relationship;
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" role="img" aria-label="${title}">
-      <defs>
-        <linearGradient id="g" x1="0%" x2="100%" y1="0%" y2="100%">
-          <stop offset="0%" stop-color="hsl(${hue} 70% 88%)"/>
-          <stop offset="100%" stop-color="hsl(${(hue + 40) % 360} 70% 78%)"/>
-        </linearGradient>
-      </defs>
-      <rect width="900" height="600" rx="56" fill="url(#g)" />
-      <circle cx="720" cy="120" r="120" fill="rgba(255,255,255,0.34)" />
-      <circle cx="160" cy="470" r="150" fill="rgba(255,255,255,0.18)" />
-      <text x="64" y="110" font-size="44" font-family="Arial, sans-serif" fill="#163042" font-weight="700">${story}</text>
-      <text x="64" y="180" font-size="54" font-family="Arial, sans-serif" fill="#163042" font-weight="700">${title}</text>
-      <text x="64" y="250" font-size="30" font-family="Arial, sans-serif" fill="#163042">${memory.relationship}</text>
-    </svg>
-  `;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function applyPartialToRecord(
@@ -469,11 +433,6 @@ export function buildPatientView(
 
 export function createMusicTrack(profile: PatientProfile) {
   return getMusicTrack(profile);
-}
-
-export function createMemoryImage(memory: Memory) {
-  if (memory.photoPath) return memory.photoPath;
-  return memoryArt(memory);
 }
 
 export { updateActiveRecord, getActiveRecord, recordToAppState } from "@/lib/patient-store";

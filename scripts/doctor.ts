@@ -6,7 +6,11 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const envPath = join(root, ".env.local");
+const envPath = existsSync(join(root, ".env.local"))
+  ? join(root, ".env.local")
+  : existsSync(join(root, ".env"))
+    ? join(root, ".env")
+    : join(root, ".env.example");
 const envExample = join(root, ".env.example");
 let ok = true;
 
@@ -37,12 +41,15 @@ try {
   check("Python FastAPI", false, "missing", "pnpm install (postinstall) or pip install -r agent/requirements.txt");
 }
 
-const envFile = existsSync(envPath) ? envPath : envExample;
+const envFile = envPath;
 if (existsSync(envFile)) {
   const env = readFileSync(envFile, "utf8");
   const offline = /\bOFFLINE=1\b/.test(env);
   const hasLlm = /GEMINI_API_KEY=\S+/.test(env) || /OPENROUTER_API_KEY=\S+/.test(env);
   check("LLM or offline", offline || hasLlm, offline ? "OFFLINE=1" : hasLlm ? "key set" : "none", "Set GEMINI_API_KEY or OFFLINE=1 in .env.local");
+
+  const dataDir = process.env.ECHOES_DATA_DIR?.trim() || join(root, ".echoes");
+  check("Data directory", true, dataDir, "Patient DB: .echoes/patients.json (set ECHOES_DATA_DIR to override)");
 } else {
   check(".env", false, "missing", "cp .env.example .env.local");
 }

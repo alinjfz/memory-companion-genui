@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:runtime": "node --experimental-strip-types --experimental-loader ./scripts/ts-paths-loader.mjs --test --test-concurrency=1 tests/runtime/*.ts",
+    "test:runtime": "node --experimental-strip-types --experimental-loader ./scripts/ts-paths-loader.mjs --test --test-concurrency=1 tests/runtime/*.ts tests/patient/*.ts",
+    "test": "pnpm test:runtime",
     "doctor": "node --experimental-strip-types scripts/doctor.ts",
     "smoke": "node --experimental-strip-types scripts/smoke.ts"
   },
@@ -25,6 +26,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "redis": "^6.0.0",
+    "server-only": "^0.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
