@@ -1,6 +1,8 @@
 import { buildResearchAnswer } from "@/lib/echoes";
 import type { MomentKind, MomentTheme, PatientMoment } from "@/lib/patient-moments";
+import { profileContextForLlm } from "@/lib/patient-moments";
 import type { PatientProfile } from "@/lib/echoes";
+import type { MemoryPolicy } from "@/lib/app-state-helpers";
 
 export type EvidenceCard = {
   suggestion: string;
@@ -164,6 +166,8 @@ Rules:
 - Never mention Alzheimer's, dementia, or diagnosis.
 - Warm, concrete, reassuring tone.
 - Keep title under 6 words and body under 2 short sentences.
+- For memory cards, honour memory policy: redirect = gentle indirect wording, soften = shorter, hide = do not use.
+- Style each card uniquely: pick accent (hex), surface (css gradient), text (hex), icon (emoji) that fit the memory mood.
 Return only JSON with keys: title, body, speakText, okayLabel, theme.
 theme must include: mood, accent (hex), surface (css gradient), text (hex), icon (emoji).`;
 
@@ -257,13 +261,15 @@ export async function generatePatientMoment(params: {
   step: number;
   total: number;
   fallback: PatientMoment;
+  memoryPolicies?: Record<string, MemoryPolicy>;
 }): Promise<PatientMoment> {
   if (process.env.OFFLINE === "1") return params.fallback;
 
   const prompt = `Create one patient card.
 Kind: ${params.kind}
 Step ${params.step + 1} of ${params.total}
-Context: ${params.contextJson}`;
+Full patient data: ${JSON.stringify(profileContextForLlm(params.profile, params.memoryPolicies))}
+Moment context: ${params.contextJson}`;
 
   const draft = await callPatientLlm(prompt);
   if (!draft?.title || !draft.body) return params.fallback;
@@ -291,29 +297,24 @@ export async function generatePatientAnswer(params: {
   step: number;
   total: number;
   fallback: PatientMoment;
+  memoryPolicies?: Record<string, MemoryPolicy>;
 }): Promise<PatientMoment> {
   if (process.env.OFFLINE === "1") return params.fallback;
 
-  const prompt = `Answer the patient's spoken question.
+  const prompt = `Answer the patient's spoken question using ALL profile data below.
+If a specific memory matches, write as a warm memory card (title + story).
 Question: ${params.question}
-Patient profile: ${JSON.stringify({
-    first_name: params.profile.first_name,
-    family_members: params.profile.family_members,
-    music_preference: params.profile.music_preference,
-    key_memories: params.profile.key_memories.map((m) => ({
-      title: m.title,
-      relationship: m.relationship,
-    })),
-  })}`;
+Full patient profile: ${JSON.stringify(profileContextForLlm(params.profile, params.memoryPolicies))}`;
 
   const draft = await callPatientLlm(prompt);
   if (!draft?.body) return params.fallback;
 
   return {
     ...params.fallback,
-    title: draft.title ?? "For you",
+    title: draft.title ?? params.fallback.title,
     body: draft.body,
     speakText: draft.speakText ?? draft.body,
+    kind: params.fallback.imageUrl ? "memory" : params.fallback.kind,
     theme: {
       ...params.fallback.theme,
       accent: draft.theme?.accent ?? params.fallback.theme.accent,
@@ -321,6 +322,8 @@ Patient profile: ${JSON.stringify({
       text: draft.theme?.text ?? params.fallback.theme.text,
       icon: draft.theme?.icon ?? params.fallback.theme.icon,
     },
+    imageUrl: params.fallback.imageUrl,
+    memoryId: params.fallback.memoryId,
   };
 }
 

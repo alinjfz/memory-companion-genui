@@ -859,6 +859,28 @@ textarea {
   }
 }
 
+.patient-moment-card.mood-memory {
+  border-color: color-mix(in srgb, var(--moment-accent) 28%, white);
+}
+
+.patient-moment-card.mood-memory .patient-moment-photo {
+  width: min(100%, 18rem);
+  aspect-ratio: 4 / 3;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(45, 60, 80, 0.16);
+}
+
+.patient-moment-card.mood-memory .patient-moment-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.patient-moment-card.mood-talk {
+  border-style: dashed;
+}
+
 .patient-moment-icon {
   display: grid;
   place-items: center;

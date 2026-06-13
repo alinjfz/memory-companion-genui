@@ -28,6 +28,7 @@ export type Role = "patient" | "caretaker";
 export interface AppState {
   accessCode: string;
   caretakerName: string;
+  caretakerEmail: string;
   profile: PatientProfile;
   activity: ActivityEvent[];
   memoryPolicies: Record<string, MemoryPolicy>;

@@ -6,6 +6,7 @@ import {
   type PatientProfile,
 } from "@/lib/echoes";
 import { createMemoryImage } from "@/lib/app-state";
+import type { MemoryPolicy } from "@/lib/app-state-helpers";
 
 export type MomentKind = "greeting" | "task" | "memory" | "medication" | "talk" | "done";
 
@@ -34,6 +35,7 @@ export type PatientMoment = {
   showOkay: boolean;
   okayLabel: string;
   imageUrl?: string;
+  memoryId?: string;
 };
 
 const THEMES: Record<MomentKind, MomentTheme> = {
@@ -81,6 +83,49 @@ const THEMES: Record<MomentKind, MomentTheme> = {
   },
 };
 
+export function themeForMemory(memory: Memory): MomentTheme {
+  const rel = memory.relationship.toLowerCase();
+  const title = memory.title.toLowerCase();
+
+  if (/wife|husband|partner|anniversary|rose/.test(`${rel} ${title}`)) {
+    return {
+      mood: "memory",
+      accent: "#b8860b",
+      surface: "linear-gradient(155deg, #fff8eb 0%, #fdf2f8 100%)",
+      text: "#5c4030",
+      icon: memory.photoHint || "💍",
+    };
+  }
+  if (/grandson|granddaughter|grand|baby|oliver/.test(`${rel} ${title}`)) {
+    return {
+      mood: "memory",
+      accent: "#6a9fd4",
+      surface: "linear-gradient(155deg, #eef6ff 0%, #f8fbff 100%)",
+      text: "#2a4a6b",
+      icon: memory.photoHint || "👶",
+    };
+  }
+  if (/daughter|son|child|helen/.test(`${rel} ${title}`)) {
+    return {
+      mood: "memory",
+      accent: "#6a9f8a",
+      surface: "linear-gradient(155deg, #eef8f2 0%, #faf8f5 100%)",
+      text: "#2d5040",
+      icon: memory.photoHint || "👨‍👩‍👧",
+    };
+  }
+  if (/career|work|bridge|code/.test(`${rel} ${title}`)) {
+    return {
+      mood: "memory",
+      accent: "#4a6a9f",
+      surface: "linear-gradient(155deg, #eef2fa 0%, #f5f8fc 100%)",
+      text: "#1e3555",
+      icon: memory.photoHint || "💻",
+    };
+  }
+  return { ...THEMES.memory, icon: memory.photoHint || THEMES.memory.icon };
+}
+
 function londonHour() {
   const hour = Number(
     new Intl.DateTimeFormat("en-GB", {
@@ -113,10 +158,23 @@ function pickMedication(profile: PatientProfile): Medication | null {
   return evening ?? profile.medications[profile.medications.length - 1] ?? null;
 }
 
-export function buildMomentPlan(profile: PatientProfile): MomentSpec[] {
+function memoryStoryForPolicy(memory: Memory, policy: MemoryPolicy = "show") {
+  if (policy === "hide") return null;
+  if (policy === "redirect") {
+    return "Someone you love dearly is watching over you with a warm smile.";
+  }
+  if (policy === "soften") {
+    return memory.story.split(".").slice(0, 1).join(".").trim() || memory.story;
+  }
+  return memory.story;
+}
+
+export function buildMomentPlan(
+  profile: PatientProfile,
+  memoryPolicies: Record<string, MemoryPolicy> = {},
+): MomentSpec[] {
   const greeting = buildMorningGreeting(profile);
   const task = pickNextTask(profile);
-  const memory = profile.key_memories[0];
   const medication = pickMedication(profile);
 
   const plan: MomentSpec[] = [
@@ -124,8 +182,14 @@ export function buildMomentPlan(profile: PatientProfile): MomentSpec[] {
     { id: "task", kind: "task", context: { task } },
   ];
 
-  if (memory) {
-    plan.push({ id: "memory", kind: "memory", context: { memory } });
+  for (const memory of profile.key_memories) {
+    const policy = memoryPolicies[memory.id] ?? "show";
+    if (policy === "hide") continue;
+    plan.push({
+      id: `memory-${memory.id}`,
+      kind: "memory",
+      context: { memory, policy },
+    });
   }
 
   if (medication) {
@@ -181,18 +245,23 @@ export function fallbackMoment(
 
   if (spec.kind === "memory") {
     const memory = spec.context.memory as Memory;
-    const story = memory.story.split(".").slice(0, 1).join(".").trim();
+    const policy = (spec.context.policy as MemoryPolicy) ?? "show";
+    const story =
+      memoryStoryForPolicy(memory, policy)?.split(".").slice(0, 2).join(".").trim() ||
+      "A warm memory is here for you.";
+    const memoryTheme = themeForMemory(memory);
     return {
       step,
       total,
       kind: "memory",
       title: memory.title,
-      body: story || "A warm memory is here for you.",
-      speakText: story || `Remember ${memory.title}.`,
-      theme: { ...theme, icon: memory.photoHint || theme.icon },
+      body: story,
+      speakText: story,
+      theme: memoryTheme,
       showOkay: true,
       okayLabel: "Okay",
       imageUrl: createMemoryImage(memory),
+      memoryId: memory.id,
     };
   }
 
@@ -224,33 +293,99 @@ export function fallbackMoment(
   };
 }
 
+export function findMemoryForQuestion(
+  message: string,
+  profile: PatientProfile,
+  memoryPolicies: Record<string, MemoryPolicy> = {},
+): Memory | null {
+  const lower = message.toLowerCase();
+
+  for (const memory of profile.key_memories) {
+    const policy = memoryPolicies[memory.id] ?? "show";
+    if (policy === "hide") continue;
+
+    const haystack = `${memory.title} ${memory.story} ${memory.relationship}`.toLowerCase();
+    if (lower.split(/\s+/).some((word) => word.length > 3 && haystack.includes(word))) {
+      return memory;
+    }
+  }
+
+  for (const member of profile.family_members) {
+    if (lower.includes(member.name.toLowerCase())) {
+      const match = profile.key_memories.find((memory) => {
+        const policy = memoryPolicies[memory.id] ?? "show";
+        if (policy === "hide") return false;
+        return (
+          memory.relationship.toLowerCase().includes(member.relationship.toLowerCase()) ||
+          memory.story.toLowerCase().includes(member.name.toLowerCase()) ||
+          memory.title.toLowerCase().includes(member.name.toLowerCase())
+        );
+      });
+      if (match) return match;
+    }
+  }
+
+  if (/child|daughter|son|grand|baby|wife|husband|partner/.test(lower)) {
+    const keyword = lower.includes("grand")
+      ? "grand"
+      : lower.includes("daughter")
+        ? "daughter"
+        : lower.includes("son")
+          ? "son"
+          : lower.includes("wife") || lower.includes("husband")
+            ? "wife"
+            : "child";
+    const match = profile.key_memories.find((memory) => {
+      const policy = memoryPolicies[memory.id] ?? "show";
+      return policy !== "hide" && memory.relationship.toLowerCase().includes(keyword);
+    });
+    if (match) return match;
+  }
+
+  return null;
+}
+
 export function fallbackAskMoment(
   message: string,
   profile: PatientProfile,
   step: number,
   total: number,
+  memoryPolicies: Record<string, MemoryPolicy> = {},
 ): PatientMoment {
   const lower = message.toLowerCase();
   const firstName = profile.first_name;
+  const matched = findMemoryForQuestion(message, profile, memoryPolicies);
+
+  if (matched) {
+    const policy = memoryPolicies[matched.id] ?? "show";
+    const story =
+      memoryStoryForPolicy(matched, policy)?.split(".").slice(0, 2).join(".").trim() ||
+      matched.title;
+    return {
+      step,
+      total,
+      kind: "memory",
+      title: matched.title,
+      body: story,
+      speakText: story,
+      theme: themeForMemory(matched),
+      showOkay: true,
+      okayLabel: "Okay",
+      imageUrl: createMemoryImage(matched),
+      memoryId: matched.id,
+    };
+  }
+
   let body = `I am here with you, ${firstName}.`;
 
-  if (/child|daughter|son|grand/.test(lower) || profile.family_members.some((m) => lower.includes(m.name.toLowerCase()))) {
-    const person =
-      profile.family_members.find((member) => lower.includes(member.name.toLowerCase())) ??
-      profile.family_members[0];
-    if (person) {
-      body = `Yes, ${person.name} is your ${person.relationship}. They love you very much.`;
-    }
-  } else if (/who am i|my name/.test(lower)) {
+  if (/who am i|my name/.test(lower)) {
     body = `You are ${firstName}. You are safe at home.`;
   } else if (/music|song/.test(lower) && profile.music_preference) {
     body = `You love ${profile.music_preference}. That music can feel like home.`;
   } else {
-    const pet = profile.family_members.find((member) =>
-      /cat|dog|pet/i.test(member.relationship),
-    );
-    if (pet && lower.includes(pet.name.toLowerCase())) {
-      body = `${pet.name} is nearby. A gentle friend at home.`;
+    const person = profile.family_members.find((member) => lower.includes(member.name.toLowerCase()));
+    if (person) {
+      body = `Yes, ${person.name} is your ${person.relationship}. They love you very much.`;
     }
   }
 
@@ -267,19 +402,40 @@ export function fallbackAskMoment(
   };
 }
 
-export function momentSpecContext(spec: MomentSpec, profile: PatientProfile) {
+export function profileContextForLlm(
+  profile: PatientProfile,
+  memoryPolicies: Record<string, MemoryPolicy> = {},
+) {
+  return {
+    first_name: profile.first_name,
+    name: profile.name,
+    age: profile.age,
+    stage: profile.stage,
+    location_area: profile.location_area,
+    music_preference: profile.music_preference,
+    other_preferences: profile.other_preferences,
+    family_members: profile.family_members,
+    daily_tasks: profile.daily_tasks,
+    medications: profile.medications,
+    key_memories: profile.key_memories.map((memory) => ({
+      id: memory.id,
+      title: memory.title,
+      story: memory.story,
+      relationship: memory.relationship,
+      photoHint: memory.photoHint,
+      policy: memoryPolicies[memory.id] ?? "show",
+    })),
+  };
+}
+
+export function momentSpecContext(
+  spec: MomentSpec,
+  profile: PatientProfile,
+  memoryPolicies: Record<string, MemoryPolicy> = {},
+) {
   return JSON.stringify({
     kind: spec.kind,
-    profile: {
-      first_name: profile.first_name,
-      stage: profile.stage,
-      location_area: profile.location_area,
-      music_preference: profile.music_preference,
-      family_members: profile.family_members.map((m) => ({
-        name: m.name,
-        relationship: m.relationship,
-      })),
-    },
+    profile: profileContextForLlm(profile, memoryPolicies),
     context: spec.context,
   });
 }

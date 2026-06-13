@@ -220,7 +220,7 @@ export default function PatientPage() {
       return;
     }
     if (!pin) {
-      setLeaveError("Enter your caretaker's passcode.");
+      setLeaveError("Enter your caretaker's password.");
       return;
     }
 
@@ -321,7 +321,7 @@ export default function PatientPage() {
           <section className="patient-leave-modal">
             <h2 className="patient-leave-title">Leave this screen?</h2>
             <p className="patient-leave-body">
-              Enter the passcode your caretaker set. This helps avoid leaving by accident.
+              Enter your caretaker&apos;s password. This helps avoid leaving by accident.
             </p>
             <input
               className="caretaker-input"
@@ -329,7 +329,7 @@ export default function PatientPage() {
               autoComplete="off"
               value={leavePin}
               onChange={(e) => setLeavePin(e.target.value)}
-              placeholder="Caretaker passcode"
+              placeholder="Caretaker password"
               onKeyDown={(e) => {
                 if (e.key === "Enter") void confirmLeave();
               }}

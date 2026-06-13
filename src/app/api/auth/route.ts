@@ -1,73 +1,85 @@
 import { NextResponse } from "next/server";
 import { recordToAppState } from "@/lib/app-state";
+import { isValidEmail, normalizeEmail } from "@/lib/auth-crypto";
+import {
+  createSessionToken,
+  readCaretakerSession,
+  saveCaretakerSession,
+} from "@/lib/caretaker-session";
 import {
   applyDemoToActive,
-  connectPatient,
-  createPatient,
+  createPatientAccount,
   getActiveRecord,
+  signInCaretaker,
+  activatePatient,
 } from "@/lib/patient-store";
 import { loadDemoPackage } from "@/lib/demo-data";
+
+async function authResponse(record: NonNullable<ReturnType<typeof getActiveRecord>>) {
+  const token = createSessionToken();
+  await saveCaretakerSession(token, {
+    accessCode: record.accessCode,
+    email: record.caretakerEmail,
+    caretakerName: record.caretakerName,
+    createdAt: Date.now(),
+  });
+  return NextResponse.json({
+    token,
+    accessCode: record.accessCode,
+    state: recordToAppState(record),
+  });
+}
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | {
         action?: string;
         caretakerName?: string;
-        pin?: string;
-        accessCode?: string;
+        email?: string;
+        password?: string;
         demoId?: string;
+        token?: string;
       }
     | null;
 
   const action = body?.action ?? "";
-  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
+  const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
+  const password = typeof body?.password === "string" ? body.password : "";
   const caretakerName =
     typeof body?.caretakerName === "string" ? body.caretakerName.trim() : "";
-  const accessCode =
-    typeof body?.accessCode === "string" ? body.accessCode.trim().toUpperCase() : "";
 
-  if (action === "create") {
-    if (!caretakerName || pin.length < 4) {
+  if (action === "signup") {
+    if (!caretakerName || !isValidEmail(email) || password.length < 6) {
       return NextResponse.json(
-        { error: "Add your name and a passcode of at least 4 characters." },
+        { error: "Add your name, a valid email, and a password of at least 6 characters." },
         { status: 400 },
       );
     }
-    const record = createPatient(caretakerName, pin);
-    return NextResponse.json({
-      accessCode: record.accessCode,
-      state: recordToAppState(record),
-    });
+    const record = createPatientAccount(caretakerName, email, password);
+    if (!record) {
+      return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
+    }
+    return authResponse(record);
   }
 
-  if (action === "connect") {
-    if (!accessCode || pin.length < 4) {
-      return NextResponse.json(
-        { error: "Enter the patient code and passcode." },
-        { status: 400 },
-      );
+  if (action === "signin") {
+    if (!isValidEmail(email) || password.length < 6) {
+      return NextResponse.json({ error: "Enter your email and password." }, { status: 400 });
     }
-    const record = connectPatient(accessCode, pin);
+    const record = signInCaretaker(email, password);
     if (!record) {
-      return NextResponse.json(
-        { error: "That code or passcode did not match." },
-        { status: 401 },
-      );
+      return NextResponse.json({ error: "Email or password did not match." }, { status: 401 });
     }
-    return NextResponse.json({
-      accessCode: record.accessCode,
-      state: recordToAppState(record),
-    });
+    return authResponse(record);
   }
 
   if (action === "loadDemo") {
-    const active = getActiveRecord();
-    if (!active) {
+    const token = typeof body?.token === "string" ? body.token.trim() : "";
+    const session = token ? await readCaretakerSession(token) : null;
+    if (!session) {
       return NextResponse.json({ error: "Sign in first." }, { status: 401 });
     }
-    if (active.caregiverPin !== pin) {
-      return NextResponse.json({ error: "Passcode did not match." }, { status: 401 });
-    }
+    activatePatient(session.accessCode);
     const demo = loadDemoPackage(body?.demoId ?? "george-thomas");
     if (!demo) {
       return NextResponse.json({ error: "Demo package not found." }, { status: 404 });

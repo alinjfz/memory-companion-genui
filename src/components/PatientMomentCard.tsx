@@ -14,7 +14,7 @@ export function PatientMomentCard({
 
   return (
     <article
-      className={`patient-moment-card mood-${moment.kind}`}
+      className={`patient-moment-card mood-${moment.kind}${moment.memoryId ? ` memory-${moment.memoryId}` : ""}`}
       style={
         {
           "--moment-accent": theme.accent,

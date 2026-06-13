@@ -9,15 +9,26 @@ import {
   type PatientMoment,
 } from "@/lib/patient-moments";
 import { activatePatient, connectPatient, getActiveRecord } from "@/lib/patient-store";
+import { redisPushActivity } from "@/lib/redis";
+import { resolveCaretakerToken } from "@/lib/server-auth";
 
-function bindPatientSession(accessCode: string, pin?: string) {
-  if (!accessCode) return Boolean(getActiveRecord());
-
-  if (pin) {
-    return Boolean(connectPatient(accessCode, pin));
+function bindPatientSession(accessCode: string, pin?: string, request?: Request) {
+  if (request) {
+    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (token) {
+      return resolveCaretakerToken(
+        new Request("http://local", { headers: { authorization: `Bearer ${token}` } }),
+      ).then(Boolean);
+    }
   }
 
-  return Boolean(activatePatient(accessCode));
+  if (!accessCode) return Promise.resolve(Boolean(getActiveRecord()));
+
+  if (pin) {
+    return Promise.resolve(Boolean(connectPatient(accessCode, pin)));
+  }
+
+  return Promise.resolve(Boolean(activatePatient(accessCode)));
 }
 
 function nowTimestamp() {
@@ -28,10 +39,19 @@ function nowTimestamp() {
   }).format(new Date());
 }
 
+async function logActivity(accessCode: string, event: Parameters<typeof updateActivity>[0]) {
+  updateActivity(event);
+  await redisPushActivity(
+    accessCode,
+    JSON.stringify({ ...event, timestamp: event.timestamp || nowTimestamp() }),
+  );
+}
+
 async function resolveMoment(step: number): Promise<PatientMoment> {
   const state = getState();
   const profile = state.profile;
-  const plan = buildMomentPlan(profile);
+  const policies = state.memoryPolicies;
+  const plan = buildMomentPlan(profile, policies);
   const boundedStep = Math.max(0, Math.min(step, plan.length - 1));
   const spec = plan[boundedStep];
   const fallback = fallbackMoment(spec, profile, boundedStep, plan.length);
@@ -39,18 +59,22 @@ async function resolveMoment(step: number): Promise<PatientMoment> {
   const moment = await generatePatientMoment({
     profile,
     kind: spec.kind,
-    contextJson: momentSpecContext(spec, profile),
+    contextJson: momentSpecContext(spec, profile, policies),
     step: boundedStep,
     total: plan.length,
     fallback,
+    memoryPolicies: policies,
   });
 
   if (spec.kind === "memory") {
     moment.imageUrl = fallback.imageUrl;
+    moment.memoryId = fallback.memoryId;
+    moment.theme = { ...fallback.theme, ...moment.theme, icon: moment.theme.icon || fallback.theme.icon };
   }
 
-  if (spec.kind === "greeting") {
-    updateActivity({
+  const accessCode = state.accessCode;
+  if (spec.kind === "greeting" && accessCode) {
+    await logActivity(accessCode, {
       timestamp: nowTimestamp(),
       type: "memory_viewed",
       description: `${profile.first_name} opened their morning greeting`,
@@ -58,17 +82,18 @@ async function resolveMoment(step: number): Promise<PatientMoment> {
     });
   }
 
-  if (spec.kind === "memory") {
-    updateActivity({
+  if (spec.kind === "memory" && accessCode) {
+    const memory = spec.context.memory as { title?: string };
+    await logActivity(accessCode, {
       timestamp: nowTimestamp(),
       type: "memory_viewed",
-      description: "A memory card was shown",
+      description: memory.title ? `${memory.title} memory shown` : "A memory card was shown",
       severity: "normal",
     });
   }
 
-  if (spec.kind === "medication") {
-    updateActivity({
+  if (spec.kind === "medication" && accessCode) {
+    await logActivity(accessCode, {
       timestamp: nowTimestamp(),
       type: "medication_taken",
       description: "Medication moment acknowledged",
@@ -88,8 +113,16 @@ export async function POST(request: Request) {
     typeof body?.accessCode === "string" ? body.accessCode.trim().toUpperCase() : "";
   const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
 
-  if (accessCode && !bindPatientSession(accessCode, pin || undefined)) {
+  if (accessCode && !(await bindPatientSession(accessCode, pin || undefined, request))) {
     return NextResponse.json({ error: "Patient not found." }, { status: 404 });
+  }
+
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  if (!accessCode && token) {
+    const ok = await bindPatientSession("", undefined, request);
+    if (!ok) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
   }
 
   const action = body?.action ?? "wake";
@@ -98,15 +131,31 @@ export async function POST(request: Request) {
 
   if (action === "ask" && message) {
     const state = getState();
-    const plan = buildMomentPlan(state.profile);
-    const fallback = fallbackAskMoment(message, state.profile, step, plan.length);
+    const plan = buildMomentPlan(state.profile, state.memoryPolicies);
+    const fallback = fallbackAskMoment(message, state.profile, step, plan.length, state.memoryPolicies);
     const moment = await generatePatientAnswer({
       profile: state.profile,
       question: message,
       step,
       total: plan.length,
       fallback,
+      memoryPolicies: state.memoryPolicies,
     });
+
+    if (fallback.imageUrl) {
+      moment.imageUrl = fallback.imageUrl;
+      moment.kind = "memory";
+      moment.memoryId = fallback.memoryId;
+    }
+
+    if (state.accessCode && moment.memoryId) {
+      await logActivity(state.accessCode, {
+        timestamp: nowTimestamp(),
+        type: "memory_viewed",
+        description: `Asked about ${moment.title}`,
+        severity: "normal",
+      });
+    }
 
     return NextResponse.json({ moment });
   }
