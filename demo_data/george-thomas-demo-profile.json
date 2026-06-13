@@ -1,0 +1,111 @@
+{
+  "name": "George Thomas",
+  "first_name": "George",
+  "age": 76,
+  "stage": "mid",
+  "location_area": "Bristol",
+  "music_preference": "You Are My Sunshine",
+  "other_preferences": [
+    "allotment gardening",
+    "BBC Radio 4",
+    "crosswords",
+    "Bristol City FC"
+  ],
+  "daily_tasks": [
+    { "time": "8:00 AM", "description": "Breakfast with morning tablet", "icon": "☕" },
+    { "time": "9:30 AM", "description": "Check on the allotment in the garden", "icon": "🌱" },
+    { "time": "12:00 PM", "description": "Lunch and a glass of water", "icon": "🍲" },
+    { "time": "3:00 PM", "description": "Call Helen on the video tablet", "icon": "📱" },
+    { "time": "6:00 PM", "description": "Dinner and evening tablet", "icon": "🌙" }
+  ],
+  "medications": [
+    { "name": "Donepezil", "dose": "10mg", "time": "Morning" },
+    { "name": "Memantine", "dose": "5mg", "time": "Evening" }
+  ],
+  "key_memories": [
+    {
+      "id": "rose-golden-anniversary",
+      "title": "50 years with Rose",
+      "story": "You and Rose danced to You Are My Sunshine at your golden wedding in 2018. The same song as your very first dance in 1968.",
+      "photoHint": "💍",
+      "relationship": "wife",
+      "photoPath": "/demo/rose-golden-anniversary.jpg"
+    },
+    {
+      "id": "oliver-newborn",
+      "title": "Your grandson Oliver",
+      "story": "Helen had a baby boy called Oliver in May 2026. He has your eyes. You will meet him very soon.",
+      "photoHint": "👶",
+      "relationship": "grandson",
+      "photoPath": "/demo/oliver-newborn.jpg"
+    },
+    {
+      "id": "helen-reversed",
+      "title": "Your daughter Helen",
+      "story": "In 1985 you held tiny Helen in your arms at Bristol Royal Infirmary. In 2024 she held yours on the Royal Mile in Edinburgh. Same love. Always.",
+      "photoHint": "👧",
+      "relationship": "daughter",
+      "photoPath": "/demo/helen-reversed.jpg"
+    },
+    {
+      "id": "cpp-career",
+      "title": "Building bridges with code",
+      "story": "For 30 years you wrote the software that kept Bristol's bridges standing. Engineers across the UK used your work every day.",
+      "photoHint": "💻",
+      "relationship": "career",
+      "photoPath": "/demo/george-career.jpg"
+    }
+  ],
+  "family_members": [
+    { "name": "Helen", "relationship": "daughter", "age": 41, "location": "London" },
+    { "name": "Oliver", "relationship": "grandson", "age": 0, "location": "London" }
+  ],
+  "late_wife": {
+    "name": "Rose Thomas",
+    "note": "Childhood sweethearts — same Bristol street. Married 1968. Golden anniversary 2018. Passed 2023. Memory policy: redirect. Panic voice line: 'George, you are safe at home. Rose loved this song.'"
+  },
+  "music_track": {
+    "title": "You Are My Sunshine",
+    "artist": "Doris Day",
+    "memoryTouch": "Rose and George danced to this together."
+  },
+  "panic_family_option_label": "See family",
+  "panic_family_option_description": "Bring Helen closer.",
+  "demo_activity_log": [
+    {
+      "id": "panic-1",
+      "timestamp": "2:14 PM",
+      "type": "panic",
+      "description": "Panic button pressed",
+      "severity": "alert"
+    },
+    {
+      "id": "panic-resolved-1",
+      "timestamp": "2:15 PM",
+      "type": "panic_resolved",
+      "description": "Calming voice played — You Are My Sunshine started",
+      "severity": "normal"
+    },
+    {
+      "id": "memory-2",
+      "timestamp": "10:30 AM",
+      "type": "memory_viewed",
+      "description": "Oliver memory opened — George asked about the baby",
+      "severity": "normal"
+    },
+    {
+      "id": "memory-1",
+      "timestamp": "11:02 AM",
+      "type": "memory_viewed",
+      "description": "Rose memory opened",
+      "severity": "normal"
+    },
+    {
+      "id": "med-1",
+      "timestamp": "8:03 AM",
+      "type": "medication_taken",
+      "description": "Morning tablet confirmed",
+      "severity": "normal"
+    }
+  ]
+}

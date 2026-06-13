@@ -1,0 +1,32 @@
+PHOTO: George Thomas — Software Engineer, Severn Engineering Ltd, Bristol, 1994
+Used for memory: "Building bridges with code" (id: cpp-career)
+Place in: public/demo/george-career.jpg
+
+--- WHAT THE PHOTO LOOKS LIKE ---
+
+A candid office photograph, Bristol, approximately 1994.
+
+SUBJECT:
+- George Thomas, 44 years old. Dark hair going slightly grey at the temples. Wearing a blue checked cotton shirt, sleeves rolled to the elbows. Reading glasses pushed up on his forehead.
+- He is seated at a large desk in front of a CRT monitor — the deep, bulky kind from the early 1990s. On the screen: wireframe CAD or structural analysis software showing a bridge or truss structure (lines, nodes, load vectors). This is the code he wrote in C++.
+- On the desk: engineering drawings rolled to one side, a coffee mug, a thick reference manual (probably "The C++ Programming Language" by Stroustrup, or a structural engineering reference). Post-it notes on the monitor.
+- Behind him: an open-plan engineering office. Colleagues at adjacent desks. Fluorescent strip lighting. A whiteboard with equations and flow diagrams partially visible.
+
+MOOD: Quietly proud. The photo looks unofficial — a colleague took it. George is not posing. He might be mid-explanation of something on the screen. This is a man at his best — solving problems, confident, in his element.
+
+THE STORY:
+George spent 30 years at Severn Engineering Ltd writing structural analysis software in C++. His code was used to model load-bearing capacity for bridge restoration projects across the UK, including work adjacent to the Clifton Suspension Bridge. He mentored junior engineers and contributed to an internal codebase that outlasted him.
+He is now 76, mid-stage memory difficulties, and sometimes cannot find his keys. He built software that helped keep bridges standing.
+
+--- STOCK PHOTO SEARCH TERMS ---
+- "1990s engineer at computer workstation office"
+- "vintage 1990s office desk CRT monitor engineer"
+- "1990s software developer at work retro office"
+- "early 90s engineering office team workstation"
+
+Save as: public/demo/george-career.jpg (landscape 900x600)
+
+--- NOTE FOR DEMO ---
+This memory is less emotionally loaded than Rose or Helen/Oliver — it's the memory of WHO HE WAS.
+Best used during research screen ("What kind of activities help with mid-stage memory difficulties?")
+or if a judge asks "what does George do?" — this answers: he built things that lasted.

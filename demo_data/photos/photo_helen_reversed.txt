@@ -1,0 +1,35 @@
+PHOTO: George & Helen — The Reversed Roles Diptych
+Used for memory: "Your daughter Helen" (id: helen-reversed)
+Place in: public/demo/helen-reversed.jpg
+
+--- WHAT THE PHOTO LOOKS LIKE ---
+
+THIS IS A SIDE-BY-SIDE DIPTYCH (two photos combined into one image, split vertically down the middle with a thin white line).
+
+LEFT PANEL — Bristol Royal Infirmary, 1985:
+- Young George, 35 years old. Dark brown hair, strong jaw. Wearing a pale blue short-sleeved shirt. Standing in a hospital corridor, cream-painted walls behind him.
+- He is cradling baby Helen — days old, wrapped in a blue NHS blanket. He is looking down at her, not at the camera. His face is the face of someone who has just realised life will never be the same.
+- Lighting: Slightly washed-out hospital fluorescent light, soft around the edges. This looks like a photo taken on a 1985 35mm camera — slightly warm, slightly grainy.
+
+RIGHT PANEL — Royal Mile, Edinburgh, 2024:
+- George, now 74 years old. Silver-haired, slightly stooped, wearing a grey overcoat and a red scarf. Standing on a cobbled street with Edinburgh's Old Town visible behind.
+- Helen, 39 years old. Dark hair (she looks like George — same jaw, same eyes). She has her arm firmly looped through his, her shoulder close to his. She is turned slightly toward him, not the camera, attentive.
+- George is smiling at something out of frame. He looks warm but frail. She looks steady.
+- Lighting: Cool, bright autumn Edinburgh light. Feels like October, early afternoon.
+
+CAPTION (optional, for print or presentation): No caption needed. The image says everything.
+
+ASSEMBLY NOTE: If you can't find a perfect diptych match, two separate photos printed side by side work equally well. The key emotional beat: LEFT = he holds her. RIGHT = she holds him. Mirror image of love.
+
+--- STOCK PHOTO SEARCH TERMS ---
+
+LEFT panel: "new father holding baby 1980s hospital" or "proud father newborn baby 1985" or "young father cradling newborn hospital corridor"
+
+RIGHT panel: "adult daughter elderly father walking city UK" or "senior man daughter arm in arm cobblestone street" or "elderly man daughter Edinburgh city"
+
+Save as: public/demo/helen-reversed.jpg (landscape 1200x600 — wide enough for both panels clearly visible)
+
+--- NOTE FOR DEMO ---
+During demo step 3 ("Do I have a child?") the app should show this image alongside:
+"In 1985 you held tiny Helen in your arms. In 2024 she held yours in Edinburgh. Same love. Always."
+If judges don't react to this, nothing will work. It's the centrepiece.

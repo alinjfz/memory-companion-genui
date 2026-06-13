@@ -1,0 +1,30 @@
+PHOTO: Oliver Thomas — Newborn, May 2026
+Used for memory: "Your grandson Oliver" (id: oliver-newborn)
+Place in: public/demo/oliver-newborn.jpg
+
+--- WHAT THE PHOTO LOOKS LIKE ---
+
+A close, intimate photo taken in a hospital or birthing suite, May 2026.
+
+SUBJECT:
+- Oliver: Tiny newborn, 1–2 days old. Wrapped snugly in a white cellular cotton blanket — the kind every UK NHS hospital uses. Eyes closed in deep sleep. One small fist loosely curled near his cheek. Pink-cheeked, with a faint wisp of dark hair.
+
+OPTIONAL DETAIL: A woman's hand — Helen's — resting gently alongside him on the white sheet. No face visible. Just the hand, close and protective.
+
+MOOD: Absolute stillness. The quiet miracle of a new life. This photo hits hard when shown to an audience — the contrast with George's memory loss is the point. George has a grandson he might forget, but Oliver's whole life is ahead.
+
+COLOUR TONES: Clean whites, soft skin tones, pale blues. No harsh flash. Natural or very soft light.
+
+--- STOCK PHOTO SEARCH TERMS ---
+Try these on Unsplash / Pexels / Getty:
+- "newborn baby sleeping white blanket NHS hospital"
+- "newborn baby close up sleeping wrapped blanket"
+- "tiny newborn baby fist cheek sleeping"
+
+Best match: White blanket, close crop, no distracting background, NHS/UK hospital aesthetic.
+Save as: public/demo/oliver-newborn.jpg (portrait or square crop works)
+
+--- NOTE FOR DEMO ---
+When George asks "Do I have a grandchild?" the app should show this photo with:
+"Helen had a baby boy called Oliver in May 2026. He has your eyes. You will meet him very soon."
+The "very soon" is the emotional puncture — George may not remember this conversation tomorrow.
