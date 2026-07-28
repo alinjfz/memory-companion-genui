@@ -2,6 +2,14 @@
 
 Echoes is an adaptive care companion for people who need calm, familiar support through the day. A caregiver uploads a care plan PDF, the system turns it into a personalized experience, and the patient sees a simple, reassuring interface that changes with their needs.
 
+<p align="center">
+  <a href="https://youtu.be/tGdJMv6DU-A">
+    <img src="https://img.youtube.com/vi/tGdJMv6DU-A/hqdefault.jpg" alt="Watch the Echoes demo" width="720" />
+  </a>
+</p>
+
+<p align="center"><em>Click to watch Echoes in action.</em></p>
+
 It combines:
 
 - **CopilotKit + AG-UI** for live agent-to-UI streaming
@@ -182,4 +190,3 @@ Built for the London A2A + Generative UI hackathon with:
 - **Linkup** for research and music discovery
 - **ElevenLabs** for calming voice output
 - **Google Gemini 3.5 Flash** as the model behind the agents
-
